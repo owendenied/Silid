@@ -1,4 +1,4 @@
-import React from 'react'
+// Landing page
 import { Link } from 'react-router-dom'
 import { BookOpen, Users, WifiOff } from 'lucide-react'
 

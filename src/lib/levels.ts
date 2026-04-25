@@ -6,10 +6,10 @@ export interface LevelInfo {
 }
 
 export const LEVELS: LevelInfo[] = [
-  { title: 'Mag-aaral', minXp: 0, maxXp: 100, nextTitle: 'Lakan/Lakambini' },
-  { title: 'Lakan/Lakambini', minXp: 100, maxXp: 300, nextTitle: 'Bayani' },
-  { title: 'Bayani', minXp: 300, maxXp: 500, nextTitle: 'Guro ng Bayan' },
-  { title: 'Guro ng Bayan', minXp: 500, maxXp: 1000000, nextTitle: null },
+  { title: 'Beginner', minXp: 0, maxXp: 100, nextTitle: 'Scholar' },
+  { title: 'Scholar', minXp: 100, maxXp: 300, nextTitle: 'Hero' },
+  { title: 'Hero', minXp: 300, maxXp: 500, nextTitle: 'Master' },
+  { title: 'Master', minXp: 500, maxXp: 1000000, nextTitle: null },
 ];
 
 export const getLevelInfo = (xp: number): LevelInfo => {

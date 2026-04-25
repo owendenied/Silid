@@ -30,8 +30,17 @@ export const useAppStore = create<AppState>()(
       setOfflineStatus: (isOffline) => set({ isOffline }),
       setInitializing: (isInitializing) => set({ isInitializing }),
       logout: async () => {
-        await supabase.auth.signOut();
+        // 1. Clear state immediately
         set({ user: null });
+        
+        // 2. Clear all local storage to be sure
+        localStorage.clear();
+        
+        // 3. Fire and forget Supabase signout
+        supabase.auth.signOut().catch((e: any) => console.error(e));
+        
+        // 4. Redirect immediately
+        window.location.replace('/login');
       },
     }),
     {
@@ -54,8 +63,11 @@ window.addEventListener('offline', () => {
 });
 
 // Setup Supabase auth listener
-supabase.auth.onAuthStateChange(async (event, session) => {
+supabase.auth.onAuthStateChange(async (_event, session) => {
   if (session?.user) {
+    const pendingRole = localStorage.getItem('pending_role') as 'student' | 'teacher' || 'student';
+    
+    // Check if user profile exists in local DB
     const { data: userData } = await supabase
       .from('users')
       .select('*')
@@ -72,15 +84,41 @@ supabase.auth.onAuthStateChange(async (event, session) => {
         xp: userData.xp || 0
       });
     } else {
-      // If user profile doesn't exist in 'users' table yet
-      useAppStore.getState().setUser({
-        id: session.user.id,
-        dbId: 0, // Temporary until profile is created
-        role: session.user.user_metadata?.role || 'student',
-        name: session.user.user_metadata?.full_name || 'User',
-        email: session.user.email || '',
-        xp: 0
-      });
+      // Auto-create profile in local DB
+      const { data: newProfile } = await supabase
+        .from('users')
+        .insert([{
+          openId: session.user.id,
+          name: session.user.user_metadata?.full_name || 'User',
+          email: session.user.email || '',
+          appRole: pendingRole,
+          xp: 0,
+          streak: 0
+        }])
+        .select()
+        .single();
+
+      if (newProfile) {
+        useAppStore.getState().setUser({
+          id: session.user.id,
+          dbId: newProfile.id,
+          role: newProfile.appRole || pendingRole,
+          name: newProfile.name || session.user.user_metadata?.full_name || 'User',
+          email: session.user.email || '',
+          xp: newProfile.xp || 0
+        });
+        localStorage.removeItem('pending_role');
+      } else {
+        // Fallback
+        useAppStore.getState().setUser({
+          id: session.user.id,
+          dbId: 0,
+          role: pendingRole,
+          name: session.user.user_metadata?.full_name || 'User',
+          email: session.user.email || '',
+          xp: 0
+        });
+      }
     }
   } else {
     useAppStore.getState().setUser(null);
@@ -96,4 +134,3 @@ setTimeout(() => {
     useAppStore.getState().setInitializing(false);
   }
 }, 3000);
-
