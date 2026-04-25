@@ -33,11 +33,12 @@ export const useAppStore = create<AppState>()(
         // 1. Clear state immediately
         set({ user: null });
         
-        // 2. Clear all local storage to be sure
-        localStorage.clear();
+        // 2. Sign out from Supabase (this clears its session tokens)
+        await supabase.auth.signOut().catch((e: any) => console.error(e));
         
-        // 3. Fire and forget Supabase signout
-        supabase.auth.signOut().catch((e: any) => console.error(e));
+        // 3. Clear app-specific storage (not all localStorage — Supabase manages its own)
+        localStorage.removeItem('silid-storage');
+        localStorage.removeItem('pending_role');
         
         // 4. Redirect immediately
         window.location.replace('/login');
@@ -46,6 +47,7 @@ export const useAppStore = create<AppState>()(
     {
       name: 'silid-storage',
       partialize: (state) => ({ 
+        user: state.user,
         isOffline: state.isOffline 
       }),
     }
@@ -63,11 +65,24 @@ window.addEventListener('offline', () => {
 });
 
 // Setup Supabase auth listener
-supabase.auth.onAuthStateChange(async (_event, session) => {
+supabase.auth.onAuthStateChange(async (event, session) => {
+  if (event === 'SIGNED_OUT') {
+    useAppStore.getState().setUser(null);
+    useAppStore.getState().setInitializing(false);
+    return;
+  }
+
   if (session?.user) {
+    // If user is already hydrated from persistence and matches this session, skip DB lookup
+    const currentUser = useAppStore.getState().user;
+    if (currentUser && currentUser.id === session.user.id) {
+      useAppStore.getState().setInitializing(false);
+      return;
+    }
+
     const pendingRole = localStorage.getItem('pending_role') as 'student' | 'teacher' || 'student';
     
-    // Check if user profile exists in local DB
+    // Check if user profile exists in DB
     const { data: userData } = await supabase
       .from('users')
       .select('*')
@@ -75,20 +90,13 @@ supabase.auth.onAuthStateChange(async (_event, session) => {
       .single();
 
     if (userData) {
-      // Fetch progress from userProgress table
-      const { data: progressData } = await supabase
-        .from('userProgress')
-        .select('xp')
-        .eq('userId', userData.id)
-        .single();
-
       useAppStore.getState().setUser({
         id: session.user.id,
         dbId: userData.id,
         role: userData.appRole || 'student',
         name: userData.name || session.user.user_metadata?.full_name || 'User',
         email: session.user.email || '',
-        xp: progressData?.xp || 0
+        xp: userData.xp || 0
       });
     } else {
       // Auto-create profile
@@ -104,7 +112,6 @@ supabase.auth.onAuthStateChange(async (_event, session) => {
         }])
         .select()
         .single();
-
 
       if (newProfile) {
         useAppStore.getState().setUser({
@@ -128,13 +135,23 @@ supabase.auth.onAuthStateChange(async (_event, session) => {
         });
       }
     }
-  } else {
-    useAppStore.getState().setUser(null);
+  } else if (event === 'INITIAL_SESSION') {
+    // If it's the initial session check and it's null, we might actually be logged out
+    // But if we have a hydrated user, let's verify via getSession before wiping
+    const { data } = await supabase.auth.getSession();
+    if (!data.session) {
+      useAppStore.getState().setUser(null);
+    }
   }
 
   useAppStore.getState().setInitializing(false);
 });
 
+// If user is already hydrated from persistence, finish init immediately
+const hydratedUser = useAppStore.getState().user;
+if (hydratedUser) {
+  useAppStore.getState().setInitializing(false);
+}
 
 // Safety timeout: Ensure initialization always completes
 setTimeout(() => {
@@ -142,4 +159,4 @@ setTimeout(() => {
     console.warn("Auth initialization timed out. Proceeding anyway.");
     useAppStore.getState().setInitializing(false);
   }
-}, 3000);
+}, 5000);

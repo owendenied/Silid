@@ -146,18 +146,16 @@ export const Dashboard = () => {
       const currentDbId = await ensureDbId();
       const newJoinCode = Math.random().toString(36).substring(2, 8).toUpperCase().padEnd(6, 'X');
 
-      const { error: insertError } = await supabase.from('classrooms').insert([{
+      const { data: newClass, error: insertError } = await supabase.from('classrooms').insert([{
         name: newClassName, section: sections.join(','), teacherId: currentDbId, joinCode: newJoinCode
-      }]);
+      }]).select().single();
       if (insertError) throw new Error(insertError.message);
 
+      setClasses(prev => [...prev, { ...newClass, _count: { enrollments: 0 } }]);
       setIsModalOpen(false);
       setNewClassName('');
       setSections([]);
       setSectionInput('');
-
-      const { data: refreshData } = await supabase.from('classrooms').select('*').eq('teacherId', currentDbId);
-      setClasses(refreshData || []);
     } catch (error: any) {
       setErrorMsg(error.message || 'Unknown error');
     } finally {
