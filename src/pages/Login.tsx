@@ -1,9 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAppStore } from '../store/useAppStore';
-import { auth, db } from '../lib/firebase';
-import { signInWithEmailAndPassword, createUserWithEmailAndPassword, updateProfile } from 'firebase/auth';
-import { doc, setDoc, getDoc } from 'firebase/firestore';
+import { supabase } from '../lib/supabase';
 
 export const Login = () => {
   const { user, setUser } = useAppStore();
@@ -29,10 +27,22 @@ export const Login = () => {
     
     try {
       if (isRegistering) {
-        const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-        const fbUser = userCredential.user;
-        
+        const { data: authData, error: authError } = await supabase.auth.signUp({
+          email,
+          password,
+          options: {
+            data: {
+              full_name: name,
+              role: role
+            }
+          }
+        });
+
+        if (authError) throw authError;
+        if (!authData.user) throw new Error('Failed to create user');
+
         const profileData = {
+          id: authData.user.id,
           name,
           email,
           role,
@@ -41,42 +51,38 @@ export const Login = () => {
         };
 
         const newUser = {
-          id: fbUser.uid,
+          id: authData.user.id,
           role,
           name,
           email,
           xp: 0
         };
         
-        // Optimistic update of store to allow immediate navigation
+        // Optimistic update of store
         setUser(newUser);
         
-        // Ensure Firestore writes are complete before navigating
-        await Promise.all([
-          updateProfile(fbUser, { displayName: name }),
-          setDoc(doc(db, 'users', fbUser.uid), profileData)
-        ]);
+        // Ensure profile is created in 'users' table
+        const { error: profileError } = await supabase
+          .from('users')
+          .insert([profileData]);
+          
+        if (profileError) console.error("Error creating profile:", profileError);
         
       } else {
-        // Set initializing to true so Layout shows a loading spinner
-        // while onAuthStateChanged fetches the user profile in the background.
         useAppStore.getState().setInitializing(true);
         
-        // Safety timeout: If Firestore hangs, force isInitializing to false after 5 seconds
-        // so the user isn't stuck forever.
-        setTimeout(() => {
-          if (useAppStore.getState().isInitializing) {
-            useAppStore.getState().setInitializing(false);
-          }
-        }, 5000);
+        const { error: signInError } = await supabase.auth.signInWithPassword({
+          email,
+          password
+        });
 
-        await signInWithEmailAndPassword(auth, email, password);
+        if (signInError) throw signInError;
       }
       navigate('/dashboard');
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error(err);
-      setError(err.message || 'May naganap na error.');
-      useAppStore.getState().setInitializing(false); // Reset on error
+      setError(err instanceof Error ? err.message : 'May naganap na error.');
+      useAppStore.getState().setInitializing(false);
     } finally {
       setIsLoading(false);
     }
@@ -113,7 +119,7 @@ export const Login = () => {
                       required
                       value={name}
                       onChange={e => setName(e.target.value)}
-                      className="appearance-none block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-[var(--color-silid-teal)] focus:border-[var(--color-silid-teal)] sm:text-sm"
+                      className="appearance-none block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-silid-teal focus:border-silid-teal sm:text-sm"
                     />
                   </div>
                 </div>
@@ -128,7 +134,7 @@ export const Login = () => {
                         value="student" 
                         checked={role === 'student'}
                         onChange={() => setRole('student')}
-                        className="text-[var(--color-silid-teal)] focus:ring-[var(--color-silid-teal)]"
+                        className="text-silid-teal focus:ring-silid-teal"
                       />
                       <span>Mag-aaral (Student)</span>
                     </label>
@@ -139,7 +145,7 @@ export const Login = () => {
                         value="teacher" 
                         checked={role === 'teacher'}
                         onChange={() => setRole('teacher')}
-                        className="text-[var(--color-silid-teal)] focus:ring-[var(--color-silid-teal)]"
+                        className="text-silid-teal focus:ring-silid-teal"
                       />
                       <span>Guro (Teacher)</span>
                     </label>
@@ -161,7 +167,7 @@ export const Login = () => {
                   required
                   value={email}
                   onChange={e => setEmail(e.target.value)}
-                  className="appearance-none block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-[var(--color-silid-teal)] focus:border-[var(--color-silid-teal)] sm:text-sm"
+                  className="appearance-none block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-silid-teal focus:border-silid-teal sm:text-sm"
                 />
               </div>
             </div>
@@ -179,7 +185,7 @@ export const Login = () => {
                   required
                   value={password}
                   onChange={e => setPassword(e.target.value)}
-                  className="appearance-none block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-[var(--color-silid-teal)] focus:border-[var(--color-silid-teal)] sm:text-sm"
+                  className="appearance-none block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-silid-teal focus:border-silid-teal sm:text-sm"
                 />
               </div>
             </div>
@@ -188,12 +194,41 @@ export const Login = () => {
               <button
                 type="submit"
                 disabled={isLoading}
-                className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-[var(--color-silid-teal)] hover:bg-blue-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[var(--color-silid-teal)] disabled:opacity-50"
+                className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-silid-teal hover:bg-blue-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-silid-teal disabled:opacity-50"
               >
                 {isLoading ? 'Naglo-load...' : (isRegistering ? 'Gumawa ng Account' : 'Sign in')}
               </button>
             </div>
           </form>
+
+          <div className="mt-6">
+            <div className="relative">
+              <div className="absolute inset-0 flex items-center">
+                <div className="w-full border-t border-gray-300" />
+              </div>
+              <div className="relative flex justify-center text-sm">
+                <span className="px-2 bg-white text-gray-500">O kaya ay</span>
+              </div>
+            </div>
+
+            <div className="mt-6">
+              <button
+                onClick={async () => {
+                  const { error } = await supabase.auth.signInWithOAuth({
+                    provider: 'google',
+                    options: {
+                      redirectTo: `${window.location.origin}/dashboard`
+                    }
+                  });
+                  if (error) setError(error.message);
+                }}
+                className="w-full flex justify-center py-2 px-4 border border-gray-300 rounded-md shadow-sm bg-white text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-silid-teal"
+              >
+                <img className="h-5 w-5 mr-2" src="https://www.svgrepo.com/show/475656/google-color.svg" alt="Google logo" />
+                Mag-sign in gamit ang Google
+              </button>
+            </div>
+          </div>
 
           <div className="mt-6 text-center">
             <button 

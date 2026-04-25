@@ -1,8 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAppStore } from '../store/useAppStore';
 import { Award, Star, Flame, Trophy, Target, BookOpen, Users, LayoutDashboard, Settings } from 'lucide-react';
-import { db } from '../lib/firebase';
-import { doc, onSnapshot, collection, query, where, getDocs, or } from 'firebase/firestore';
+import { supabase } from '../lib/supabase';
 import { getLevelInfo, calculateProgress } from '../lib/levels';
 
 export const Profile = () => {
@@ -14,46 +13,58 @@ export const Profile = () => {
   useEffect(() => {
     if (!user?.id) return;
     
-    // Listen to profile updates
-    const unsubscribe = onSnapshot(doc(db, 'users', user.id), (snapshot) => {
-      if (snapshot.exists()) {
-        const data = snapshot.data();
+    // Fetch profile and listen for updates
+    const fetchProfile = async () => {
+      const { data } = await supabase
+        .from('users')
+        .select('*')
+        .eq('id', user.id)
+        .single();
+        
+      if (data) {
         setXp(data.xp || 0);
         setStreak(data.streak || 0);
       }
-    });
+    };
+    fetchProfile();
+
+    const profileChannel = supabase.channel(`profile-${user.id}`)
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'users', filter: `id=eq.${user.id}` }, (payload) => {
+        setXp(payload.new.xp || 0);
+        setStreak(payload.new.streak || 0);
+      })
+      .subscribe();
 
     // Fetch stats
     const fetchStats = async () => {
-      const qClasses = query(
-        collection(db, 'classrooms'), 
-        or(
-          where('teacherId', '==', user.id),
-          where('students', 'array-contains', user.id)
-        )
-      );
-      const snapshotClasses = await getDocs(qClasses);
-      const classCount = snapshotClasses.size;
+      // Classes count
+      const { data: classesData } = await supabase
+        .from('classrooms')
+        .select('*')
+        .or(`teacherId.eq.${user.id},students.cs.{${user.id}}`);
+        
+      const classCount = classesData?.length || 0;
       
       if (user.role === 'teacher') {
         let studentCount = 0;
-        snapshotClasses.forEach(doc => {
-          if (doc.data().teacherId === user.id) {
-            studentCount += (doc.data().students?.length || 0);
+        classesData?.forEach(cls => {
+          if (cls.teacherId === user.id) {
+            studentCount += (cls.students?.length || 0);
           }
         });
         setStats(prev => ({ ...prev, classes: classCount, students: studentCount }));
       } else {
         // Student stats
-        const qSubmissions = query(collection(db, 'submissions'), where('studentId', '==', user.id));
-        const snapshot = await getDocs(qSubmissions);
+        const { data: submissionsData } = await supabase
+          .from('submissions')
+          .select('*')
+          .eq('studentId', user.id);
         
         let finished = 0;
         let read = 0;
         
-        snapshot.forEach(doc => {
-          const data = doc.data();
-          if (data.type === 'view') {
+        submissionsData?.forEach(sub => {
+          if (sub.type === 'view') {
             read++;
           } else {
             finished++;
@@ -66,7 +77,9 @@ export const Profile = () => {
 
     fetchStats();
 
-    return () => unsubscribe();
+    return () => {
+      supabase.removeChannel(profileChannel);
+    };
   }, [user?.id, user?.role]);
 
   const levelInfo = getLevelInfo(xp);

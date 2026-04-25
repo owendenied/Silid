@@ -2,12 +2,13 @@ import React, { useState, useEffect } from 'react';
 import { Outlet, Link, useNavigate } from 'react-router-dom';
 import { useAppStore } from '../store/useAppStore';
 import { BookOpen, LogOut, WifiOff, Award, UserCircle } from 'lucide-react';
-import { db } from '../lib/firebase';
-import { doc, onSnapshot } from 'firebase/firestore';
+import { supabase } from '../lib/supabase';
 import { getLevelInfo } from '../lib/levels';
+import { useSync } from '../hooks/useSync';
 
 export const Layout = () => {
   const { user, isOffline, isInitializing, logout, setUser } = useAppStore();
+  const { syncing } = useSync();
   const navigate = useNavigate();
   const [liveXp, setLiveXp] = useState(user?.xp || 0);
 
@@ -21,19 +22,19 @@ export const Layout = () => {
     if (!user?.id) return;
     
     // Listen to real-time user updates (XP/Badges)
-    const unsubscribe = onSnapshot(doc(db, 'users', user.id), (snapshot) => {
-      if (snapshot.exists()) {
-        const data = snapshot.data();
-        setLiveXp(data.xp || 0);
-        // Sync back to store if needed
-        if (data.xp !== user.xp) {
-          setUser({ ...user, xp: data.xp });
+    const profileChannel = supabase.channel(`layout-profile-${user.id}`)
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'users', filter: `id=eq.${user.id}` }, (payload) => {
+        setLiveXp(payload.new.xp || 0);
+        if (payload.new.xp !== user.xp) {
+          setUser({ ...user, xp: payload.new.xp });
         }
-      }
-    });
+      })
+      .subscribe();
 
-    return () => unsubscribe();
-  }, [user?.id]);
+    return () => {
+      supabase.removeChannel(profileChannel);
+    };
+  }, [user?.id, user, setUser]);
 
   const levelInfo = getLevelInfo(liveXp);
 
@@ -63,6 +64,11 @@ export const Layout = () => {
         <div className="bg-orange-100 border-b border-orange-200 text-orange-800 px-4 py-2 flex items-center justify-center gap-2 text-sm font-medium z-50">
           <WifiOff size={16} />
           <span>Wala kang internet (Offline). Naka-save ang gawa mo at mag-sy-sync pagbalik online!</span>
+        </div>
+      )}
+      {syncing && (
+        <div className="bg-blue-600 text-white px-4 py-1 flex items-center justify-center gap-2 text-xs font-bold animate-pulse">
+          <span>Nag-sy-sync ng data...</span>
         </div>
       )}
       <header className="bg-white border-b border-gray-200 shadow-sm sticky top-0 z-40">

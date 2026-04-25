@@ -2,8 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAppStore } from '../store/useAppStore';
 import { ArrowLeft, CheckCircle, FileText, AlertCircle, Paperclip } from 'lucide-react';
-import { db } from '../lib/firebase';
-import { doc, getDoc, setDoc, serverTimestamp, updateDoc, increment } from 'firebase/firestore';
+import { supabase } from '../lib/supabase';
 
 export const Assignment = () => {
   const { id } = useParams<{ id: string }>();
@@ -22,16 +21,26 @@ export const Assignment = () => {
     const fetchData = async () => {
       try {
         // Fetch the classwork details
-        const cwDoc = await getDoc(doc(db, 'classwork', id));
-        if (cwDoc.exists()) {
-          setClasswork({ id: cwDoc.id, ...cwDoc.data() });
+        const { data: cwData, error: cwError } = await supabase
+          .from('classwork')
+          .select('*')
+          .eq('id', id)
+          .single();
+          
+        if (cwData) {
+          setClasswork(cwData);
         }
 
         // Fetch user's submission if it exists
         const subId = `${id}_${user.id}`;
-        const subDoc = await getDoc(doc(db, 'submissions', subId));
-        if (subDoc.exists()) {
-          setSubmission(subDoc.data());
+        const { data: subData, error: subError } = await supabase
+          .from('submissions')
+          .select('*')
+          .eq('id', subId)
+          .single();
+          
+        if (subData) {
+          setSubmission(subData);
         }
       } catch (err) {
         console.error("Error fetching assignment:", err);
@@ -54,24 +63,31 @@ export const Assignment = () => {
       const score = isCorrect ? classwork.points : 0;
       const xpToAward = isCorrect ? 20 : 0;
 
+      const subId = `${id}_${user.id}`;
       const submissionData = {
+        id: subId,
         classworkId: id,
         studentId: user.id,
         answer: selectedAnswer,
         isCorrect,
         score,
-        submittedAt: serverTimestamp()
       };
 
       // Save to submissions collection
-      const subId = `${id}_${user.id}`;
-      await setDoc(doc(db, 'submissions', subId), submissionData);
+      const { error: subError } = await supabase
+        .from('submissions')
+        .upsert([submissionData]);
+
+      if (subError) throw subError;
 
       // Award XP to user
       if (xpToAward > 0) {
-        await updateDoc(doc(db, 'users', user.id), {
-          xp: increment(xpToAward)
-        });
+        const { error: userError } = await supabase
+          .from('users')
+          .update({ xp: (user.xp || 0) + xpToAward })
+          .eq('id', user.id);
+          
+        if (userError) console.error("Error updating XP:", userError);
       }
 
       setSubmission(submissionData);
@@ -83,25 +99,32 @@ export const Assignment = () => {
     }
   };
 
-  // Add XP for viewing module (if not already viewed/awarded)
+  // Add XP for viewing module
   useEffect(() => {
     if (classwork?.type === 'module' && user && !submission && !isLoading) {
       const awardModuleXp = async () => {
         try {
           const subId = `${id}_${user.id}_viewed`;
-          const subDoc = await getDoc(doc(db, 'submissions', subId));
+          const { data: existingSub } = await supabase
+            .from('submissions')
+            .select('*')
+            .eq('id', subId)
+            .single();
           
-          if (!subDoc.exists()) {
-            await setDoc(doc(db, 'submissions', subId), {
-              classworkId: id,
-              studentId: user.id,
-              type: 'view',
-              submittedAt: serverTimestamp()
-            });
+          if (!existingSub) {
+            await supabase
+              .from('submissions')
+              .insert([{
+                id: subId,
+                classworkId: id,
+                studentId: user.id,
+                type: 'view',
+              }]);
             
-            await updateDoc(doc(db, 'users', user.id), {
-              xp: increment(5)
-            });
+            await supabase
+              .from('users')
+              .update({ xp: (user.xp || 0) + 5 })
+              .eq('id', user.id);
           }
         } catch (e) {
           console.error("Error awarding module XP:", e);

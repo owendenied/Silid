@@ -1,12 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useAppStore } from '../store/useAppStore';
-import { FileText, Plus, Users, Clock, CheckCircle, X, BookOpen, MessageSquare } from 'lucide-react';
-import { db } from '../lib/firebase';
-import { doc, getDoc, collection, query, where, onSnapshot, addDoc, serverTimestamp, orderBy } from 'firebase/firestore';
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { storage } from '../lib/firebase';
-import { Paperclip, Megaphone, Send } from 'lucide-react';
+import { Download,FileText, Plus,MessageSquare, X, BookOpen, Sparkles, Megaphone, Send, Paperclip } from 'lucide-react';
+import { supabase } from '../lib/supabase';
 
 interface Classwork {
   id: string;
@@ -36,6 +32,14 @@ export const Classroom = () => {
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isAnnouncementModalOpen, setIsAnnouncementModalOpen] = useState(false);
+  const [isAIModalOpen, setIsAIModalOpen] = useState(false);
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+  
+  // AI Generator state
+  const [aiTopic, setAiTopic] = useState('');
+  const [aiGrade, setAiGrade] = useState('');
+  const [aiSubject, setAiSubject] = useState('');
+  const [generatedPlan, setGeneratedPlan] = useState('');
   
   // Form state
   const [newType, setNewType] = useState<'module' | 'quiz'>('module');
@@ -51,41 +55,58 @@ export const Classroom = () => {
     
     // Fetch classroom details
     const fetchClass = async () => {
-      const docSnap = await getDoc(doc(db, 'classrooms', id));
-      if (docSnap.exists()) {
-        setClassroom({ id: docSnap.id, ...docSnap.data() });
+      const { data } = await supabase
+        .from('classrooms')
+        .select('*')
+        .eq('id', id)
+        .single();
+        
+      if (data) {
+        setClassroom(data);
       }
     };
     fetchClass();
 
-    // Listen to classwork
-    const q = query(collection(db, 'classwork'), where('classroomId', '==', id));
-    const unsubClasswork = onSnapshot(q, (snapshot) => {
-      const cwData: Classwork[] = [];
-      snapshot.forEach(doc => {
-        cwData.push({ id: doc.id, ...doc.data() } as Classwork);
-      });
-      cwData.sort((a, b) => (b.createdAt?.toMillis() || 0) - (a.createdAt?.toMillis() || 0));
-      setClassworks(cwData);
-    });
+    // Fetch classwork
+    const fetchClasswork = async () => {
+      const { data } = await supabase
+        .from('classwork')
+        .select('*')
+        .eq('classroomId', id)
+        .order('createdAt', { ascending: false });
+        
+      if (data) {
+        setClassworks(data);
+      }
+    };
+    fetchClasswork();
 
-    // Listen to announcements
-    const qAnnouncements = query(
-      collection(db, 'announcements'), 
-      where('classroomId', '==', id),
-      orderBy('createdAt', 'desc')
-    );
-    const unsubAnnouncements = onSnapshot(qAnnouncements, (snapshot) => {
-      const announceData: Announcement[] = [];
-      snapshot.forEach(doc => {
-        announceData.push({ id: doc.id, ...doc.data() } as Announcement);
-      });
-      setAnnouncements(announceData);
-    });
+    // Fetch announcements
+    const fetchAnnouncements = async () => {
+      const { data } = await supabase
+        .from('announcements')
+        .select('*')
+        .eq('classroomId', id)
+        .order('createdAt', { ascending: false });
+        
+      if (data) {
+        setAnnouncements(data);
+      }
+    };
+    fetchAnnouncements();
+
+    // Set up realtime subscriptions
+    const classworkChannel = supabase.channel(`classwork-${id}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'classwork', filter: `classroomId=eq.${id}` }, () => fetchClasswork())
+      .subscribe();
+
+    const announcementsChannel = supabase.channel(`announcements-${id}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'announcements', filter: `classroomId=eq.${id}` }, () => fetchAnnouncements())
+      .subscribe();
 
     return () => {
-      unsubClasswork();
-      unsubAnnouncements();
+      supabase.removeChannel(classworkChannel);
+      supabase.removeChannel(announcementsChannel);
     };
   }, [id]);
 
@@ -99,9 +120,21 @@ export const Classroom = () => {
       let attachmentName = '';
 
       if (newFile) {
-        const fileRef = ref(storage, `classwork_attachments/${Date.now()}_${newFile.name}`);
-        const uploadResult = await uploadBytes(fileRef, newFile);
-        attachmentUrl = await getDownloadURL(uploadResult.ref);
+        const fileExt = newFile.name.split('.').pop();
+        const fileName = `${Date.now()}.${fileExt}`;
+        const filePath = `classwork_attachments/${fileName}`;
+
+        const { error: uploadError } = await supabase.storage
+          .from('attachments')
+          .upload(filePath, newFile);
+
+        if (uploadError) throw uploadError;
+
+        const { data: { publicUrl } } = supabase.storage
+          .from('attachments')
+          .getPublicUrl(filePath);
+          
+        attachmentUrl = publicUrl;
         attachmentName = newFile.name;
       }
 
@@ -113,7 +146,6 @@ export const Classroom = () => {
         points: newType === 'quiz' ? 10 : 0,
         attachmentUrl,
         attachmentName,
-        createdAt: serverTimestamp()
       };
 
       if (newType === 'module') {
@@ -129,7 +161,12 @@ export const Classroom = () => {
         ];
       }
 
-      await addDoc(collection(db, 'classwork'), classworkData);
+      const { error } = await supabase
+        .from('classwork')
+        .insert([classworkData]);
+
+      if (error) throw error;
+
       setIsModalOpen(false);
       setNewTitle('');
       setNewDesc('');
@@ -149,13 +186,17 @@ export const Classroom = () => {
     setIsSubmitting(true);
 
     try {
-      await addDoc(collection(db, 'announcements'), {
-        classroomId: id,
-        authorId: user.id,
-        authorName: user.name,
-        content: announcementContent,
-        createdAt: serverTimestamp()
-      });
+      const { error } = await supabase
+        .from('announcements')
+        .insert([{
+          classroomId: id,
+          authorId: user.id,
+          authorName: user.name,
+          content: announcementContent,
+        }]);
+
+      if (error) throw error;
+
       setAnnouncementContent('');
       setIsAnnouncementModalOpen(false);
     } catch (error) {
@@ -164,6 +205,37 @@ export const Classroom = () => {
     } finally {
       setIsSubmitting(false);
     }
+  };
+
+  const handleGenerateAIPlan = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsSubmitting(true);
+    
+    // Simulate AI generation
+    setTimeout(() => {
+      const plan = `
+# Lesson Plan: ${aiTopic}
+## Subject: ${aiSubject} | Grade: ${aiGrade}
+
+### Objectives:
+1. Maunawaan ang mga pangunahing konsepto ng ${aiTopic}.
+2. Maipaliwanag ang kahalagahan nito sa ating lipunan.
+3. Makagawa ng isang maikling repleksyon tungkol sa paksa.
+
+### Motivation:
+Magsisimula ang klase sa isang maikling laro o "Ice Breaker" na may kaugnayan sa ${aiTopic}.
+
+### Discussion:
+- Pagtalakay sa kasaysayan at pinagmulan.
+- Pag-aanalisa sa mga mahahalagang detalye.
+- Malayang talakayan kasama ang mga mag-aaral.
+
+### Evaluation:
+Maikling pagsusulit na binubuo ng 5-10 na tanong.
+      `;
+      setGeneratedPlan(plan);
+      setIsSubmitting(false);
+    }, 2000);
   };
 
   if (!classroom) {
@@ -224,14 +296,23 @@ export const Classroom = () => {
             </div>
             <div className="lg:col-span-3 space-y-4">
               {user?.id === classroom?.teacherId && (
-                <div 
-                  onClick={() => setIsAnnouncementModalOpen(true)}
-                  className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm flex items-center gap-4 cursor-pointer hover:bg-gray-50 transition-colors text-gray-500"
-                >
-                  <div className="w-10 h-10 rounded-full bg-[var(--color-silid-teal)] flex items-center justify-center text-white font-bold">
-                    {user.name.charAt(0)}
+                <div className="flex gap-2">
+                  <div 
+                    onClick={() => setIsAnnouncementModalOpen(true)}
+                    className="flex-1 bg-white border border-gray-200 rounded-xl p-4 shadow-sm flex items-center gap-4 cursor-pointer hover:bg-gray-50 transition-colors text-gray-500"
+                  >
+                    <div className="w-10 h-10 rounded-full bg-silid-teal flex items-center justify-center text-white font-bold">
+                      {user.name.charAt(0)}
+                    </div>
+                    <p>Mag-post ng anunsyo sa iyong klase...</p>
                   </div>
-                  <p>Mag-post ng anunsyo sa iyong klase...</p>
+                  <button 
+                    onClick={() => setIsAIModalOpen(true)}
+                    className="bg-silid-teal text-white px-6 py-4 rounded-xl flex items-center gap-2 font-bold hover:bg-blue-800 transition-all shadow-lg shadow-blue-100"
+                  >
+                    <Sparkles size={24} />
+                    AI Plan
+                  </button>
                 </div>
               )}
               
@@ -249,7 +330,7 @@ export const Classroom = () => {
                     <div className="flex-1">
                       <div className="flex items-center gap-2 mb-1">
                         <span className="font-bold text-gray-900">{item.authorName}</span>
-                        <span className="text-sm text-gray-500">• {item.createdAt?.toDate().toLocaleDateString()}</span>
+                        <span className="text-sm text-gray-500">• {new Date(item.createdAt).toLocaleDateString()}</span>
                       </div>
                       <p className="text-gray-800 whitespace-pre-wrap">{item.content}</p>
                     </div>
@@ -313,9 +394,20 @@ export const Classroom = () => {
               </div>
             </div>
             <div>
-              <div className="flex justify-between items-center mb-4 border-b border-[var(--color-silid-teal)] pb-2">
-                <h2 className="text-2xl font-bold text-[var(--color-silid-teal)]">Mga Mag-aaral</h2>
-                <span className="font-bold text-gray-500">{classroom.students?.length || 0} mag-aaral</span>
+              <div className="flex justify-between items-center mb-4 border-b border-silid-teal pb-2">
+                <h2 className="text-2xl font-bold text-silid-teal">Mga Mag-aaral</h2>
+                <div className="flex items-center gap-4">
+                  <span className="font-bold text-gray-500">{classroom.students?.length || 0} mag-aaral</span>
+                  {user?.id === classroom.teacherId && (
+                    <button 
+                      onClick={() => setIsImportModalOpen(true)}
+                      className="flex items-center gap-2 text-silid-teal hover:bg-blue-50 px-3 py-1.5 rounded-lg border border-silid-teal transition-all text-sm font-bold"
+                    >
+                      <Plus size={16} />
+                      Import CSV
+                    </button>
+                  )}
+                </div>
               </div>
               <div className="space-y-1">
                 {classroom.students?.length === 0 ? (
@@ -480,6 +572,148 @@ export const Classroom = () => {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+      {/* AI Lesson Plan Modal */}
+      {isAIModalOpen && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-2xl w-full max-w-2xl overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200">
+            <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-gradient-to-r from-silid-teal to-blue-700 text-white">
+              <div className="flex items-center gap-2">
+                <Sparkles size={24} />
+                <h3 className="text-xl font-bold">AI Lesson Plan Generator</h3>
+              </div>
+              <button onClick={() => { setIsAIModalOpen(false); setGeneratedPlan(''); }} className="p-2 hover:bg-white/10 rounded-full">
+                <X size={20} />
+              </button>
+            </div>
+            
+            <div className="p-6">
+              {!generatedPlan ? (
+                <form onSubmit={handleGenerateAIPlan} className="space-y-4">
+                  <p className="text-gray-600 text-sm">Gamitin ang kapangyarihan ng AI para mabilis na makagawa ng lesson plan.</p>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Subject</label>
+                      <input 
+                        required
+                        value={aiSubject}
+                        onChange={e => setAiSubject(e.target.value)}
+                        placeholder="e.g. Science, Math" 
+                        className="w-full px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-silid-teal/20 outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Grade Level</label>
+                      <input 
+                        required
+                        value={aiGrade}
+                        onChange={e => setAiGrade(e.target.value)}
+                        placeholder="e.g. Grade 7" 
+                        className="w-full px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-silid-teal/20 outline-none"
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Topic / Paksa</label>
+                    <input 
+                      required
+                      value={aiTopic}
+                      onChange={e => setAiTopic(e.target.value)}
+                      placeholder="Anong paksa ang ituturo mo?" 
+                      className="w-full px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-silid-teal/20 outline-none"
+                    />
+                  </div>
+                  <div className="pt-4">
+                    <button 
+                      type="submit"
+                      disabled={isSubmitting}
+                      className="w-full bg-silid-teal text-white py-3 rounded-xl font-bold hover:bg-blue-800 disabled:opacity-50 transition-all shadow-lg shadow-blue-200"
+                    >
+                      {isSubmitting ? 'Nag-ge-generate...' : 'I-generate na! ✨'}
+                    </button>
+                  </div>
+                </form>
+              ) : (
+                <div className="space-y-4">
+                  <div className="bg-gray-50 p-6 rounded-xl border border-gray-200 max-h-[400px] overflow-y-auto">
+                    <div className="prose prose-sm max-w-none">
+                      <pre className="whitespace-pre-wrap font-sans text-gray-800">{generatedPlan}</pre>
+                    </div>
+                  </div>
+                  <div className="flex gap-3">
+                    <button 
+                      onClick={() => {
+                        setNewTitle(`Lesson Plan: ${aiTopic}`);
+                        setNewContent(generatedPlan);
+                        setNewType('module');
+                        setIsAIModalOpen(false);
+                        setIsModalOpen(true);
+                      }}
+                      className="flex-1 bg-silid-teal text-white py-3 rounded-xl font-bold hover:bg-blue-800"
+                    >
+                      I-save bilang Module
+                    </button>
+                    <button 
+                      onClick={() => setGeneratedPlan('')}
+                      className="px-6 py-3 border border-gray-200 rounded-xl font-bold hover:bg-gray-50"
+                    >
+                      Ulitin
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+      
+      {/* CSV Import Modal */}
+      {isImportModalOpen && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-2xl w-full max-w-md overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200">
+            <div className="p-6 border-b border-gray-100 flex justify-between items-center">
+              <h3 className="text-xl font-bold text-gray-900">Import Student List</h3>
+              <button onClick={() => setIsImportModalOpen(false)} className="p-2 hover:bg-gray-100 rounded-full">
+                <X size={20} />
+              </button>
+            </div>
+            <div className="p-6 space-y-4">
+              <div className="bg-blue-50 p-4 rounded-xl border border-blue-100 text-sm text-blue-800">
+                <p className="font-bold mb-1">CSV Format Required:</p>
+                <p>last_name, first_name, email, lrn</p>
+              </div>
+              
+              <div className="border-2 border-dashed border-gray-200 rounded-2xl p-8 text-center hover:border-silid-teal transition-colors cursor-pointer group">
+                <input type="file" className="hidden" id="csvFile" accept=".csv" />
+                <label htmlFor="csvFile" className="cursor-pointer">
+                  <div className="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-3 group-hover:bg-blue-50 transition-colors">
+                    <Download className="text-gray-400 group-hover:text-silid-teal" size={24} />
+                  </div>
+                  <p className="text-gray-600 font-medium">I-click para mag-upload ng CSV</p>
+                  <p className="text-xs text-gray-400 mt-1">O i-drag at i-drop dito</p>
+                </label>
+              </div>
+
+              <div className="pt-4 flex gap-3">
+                <button 
+                  onClick={() => {
+                    alert("Mock: Batch-creating accounts and enrolling students...");
+                    setIsImportModalOpen(false);
+                  }}
+                  className="flex-1 bg-silid-teal text-white py-3 rounded-xl font-bold hover:bg-blue-800 shadow-lg shadow-blue-100"
+                >
+                  I-confirm ang Import
+                </button>
+                <button 
+                  onClick={() => setIsImportModalOpen(false)}
+                  className="px-6 py-3 border border-gray-200 rounded-xl font-bold hover:bg-gray-50"
+                >
+                  Kanselahin
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}

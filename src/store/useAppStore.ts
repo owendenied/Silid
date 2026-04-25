@@ -1,8 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { auth, db } from '../lib/firebase';
-import { onAuthStateChanged, signOut, type User } from 'firebase/auth';
-import { doc, onSnapshot } from 'firebase/firestore';
+import { supabase } from '../lib/supabase';
 
 interface AppState {
   user: {
@@ -30,7 +28,7 @@ export const useAppStore = create<AppState>()(
       setOfflineStatus: (isOffline) => set({ isOffline }),
       setInitializing: (isInitializing) => set({ isInitializing }),
       logout: async () => {
-        await signOut(auth);
+        await supabase.auth.signOut();
         set({ user: null });
       },
     }),
@@ -53,43 +51,44 @@ window.addEventListener('offline', () => {
   useAppStore.getState().setOfflineStatus(true);
 });
 
-let profileUnsubscribe: (() => void) | null = null;
+// Setup Supabase auth listener
+supabase.auth.onAuthStateChange(async (event, session) => {
+  if (session?.user) {
+    const { data: userData } = await supabase
+      .from('users')
+      .select('*')
+      .eq('id', session.user.id)
+      .single();
 
-// Setup Firebase auth listener
-onAuthStateChanged(auth, async (firebaseUser: User | null) => {
-  if (profileUnsubscribe) {
-    profileUnsubscribe();
-    profileUnsubscribe = null;
-  }
-
-  if (firebaseUser) {
-    // 2. Background Update: Use onSnapshot for robust offline cache + real-time updates
-    profileUnsubscribe = onSnapshot(doc(db, 'users', firebaseUser.uid), (userDoc) => {
-      if (userDoc.exists()) {
-        const userData = userDoc.data();
-        useAppStore.getState().setUser({
-          id: firebaseUser.uid,
-          role: userData.role || (userData.level === 'Guro' ? 'teacher' : 'student'),
-          name: userData.name || firebaseUser.displayName || 'User',
-          email: firebaseUser.email || '',
-          xp: userData.xp || 0
-        });
-      }
-      useAppStore.getState().setInitializing(false);
-    }, (error) => {
-      console.error("Error fetching background profile:", error);
-      useAppStore.getState().setInitializing(false);
-    });
+    if (userData) {
+      useAppStore.getState().setUser({
+        id: session.user.id,
+        role: userData.role || (userData.level === 'Guro' ? 'teacher' : 'student'),
+        name: userData.name || session.user.user_metadata?.full_name || 'User',
+        email: session.user.email || '',
+        xp: userData.xp || 0
+      });
+    } else {
+      // If user profile doesn't exist in 'users' table yet
+      useAppStore.getState().setUser({
+        id: session.user.id,
+        role: session.user.user_metadata?.role || 'student',
+        name: session.user.user_metadata?.full_name || 'User',
+        email: session.user.email || '',
+        xp: 0
+      });
+    }
   } else {
     useAppStore.getState().setUser(null);
-    useAppStore.getState().setInitializing(false);
   }
+  useAppStore.getState().setInitializing(false);
 });
 
-// Safety timeout: Ensure initialization always completes even if Firebase hangs
+// Safety timeout: Ensure initialization always completes
 setTimeout(() => {
   if (useAppStore.getState().isInitializing) {
     console.warn("Auth initialization timed out. Proceeding anyway.");
     useAppStore.getState().setInitializing(false);
   }
 }, 3000);
+
