@@ -1,10 +1,12 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useAppStore } from '../store/useAppStore';
 import { auth, db } from '../lib/firebase';
 import { signInWithEmailAndPassword, createUserWithEmailAndPassword, updateProfile } from 'firebase/auth';
-import { doc, setDoc } from 'firebase/firestore';
+import { doc, setDoc, getDoc } from 'firebase/firestore';
 
 export const Login = () => {
+  const { user, setUser } = useAppStore();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
@@ -14,6 +16,12 @@ export const Login = () => {
   const [isLoading, setIsLoading] = useState(false);
   const navigate = useNavigate();
 
+  React.useEffect(() => {
+    if (user) {
+      navigate('/dashboard');
+    }
+  }, [user, navigate]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
@@ -22,29 +30,53 @@ export const Login = () => {
     try {
       if (isRegistering) {
         const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-        const user = userCredential.user;
+        const fbUser = userCredential.user;
         
-        // Update auth profile in background
-        updateProfile(user, { displayName: name }).catch(console.error);
-        
-        // Save to Firestore in background
-        setDoc(doc(db, 'users', user.uid), {
+        const profileData = {
           name,
           email,
           role,
           xp: 0,
-          level: 'Mag-aaral'
-        }).catch(err => {
-          console.error("Firestore error (did you create the database?):", err);
-        });
+          level: role === 'teacher' ? 'Guro' : 'Mag-aaral'
+        };
 
+        const newUser = {
+          id: fbUser.uid,
+          role,
+          name,
+          email,
+          xp: 0
+        };
+        
+        // Optimistic update of store to allow immediate navigation
+        setUser(newUser);
+        
+        // Ensure Firestore writes are complete before navigating
+        await Promise.all([
+          updateProfile(fbUser, { displayName: name }),
+          setDoc(doc(db, 'users', fbUser.uid), profileData)
+        ]);
+        
       } else {
+        // Set initializing to true so Layout shows a loading spinner
+        // while onAuthStateChanged fetches the user profile in the background.
+        useAppStore.getState().setInitializing(true);
+        
+        // Safety timeout: If Firestore hangs, force isInitializing to false after 5 seconds
+        // so the user isn't stuck forever.
+        setTimeout(() => {
+          if (useAppStore.getState().isInitializing) {
+            useAppStore.getState().setInitializing(false);
+          }
+        }, 5000);
+
         await signInWithEmailAndPassword(auth, email, password);
       }
       navigate('/dashboard');
     } catch (err: any) {
       console.error(err);
       setError(err.message || 'May naganap na error.');
+      useAppStore.getState().setInitializing(false); // Reset on error
     } finally {
       setIsLoading(false);
     }
