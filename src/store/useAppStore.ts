@@ -46,10 +46,10 @@ export const useAppStore = create<AppState>()(
     {
       name: 'silid-storage',
       partialize: (state) => ({ 
-        user: state.user,
         isOffline: state.isOffline 
       }),
     }
+
   )
 );
 
@@ -75,16 +75,23 @@ supabase.auth.onAuthStateChange(async (_event, session) => {
       .single();
 
     if (userData) {
+      // Fetch progress from userProgress table
+      const { data: progressData } = await supabase
+        .from('userProgress')
+        .select('xp')
+        .eq('userId', userData.id)
+        .single();
+
       useAppStore.getState().setUser({
         id: session.user.id,
         dbId: userData.id,
         role: userData.appRole || 'student',
         name: userData.name || session.user.user_metadata?.full_name || 'User',
         email: session.user.email || '',
-        xp: userData.xp || 0
+        xp: progressData?.xp || 0
       });
     } else {
-      // Auto-create profile in local DB
+      // Auto-create profile
       const { data: newProfile } = await supabase
         .from('users')
         .insert([{
@@ -98,22 +105,23 @@ supabase.auth.onAuthStateChange(async (_event, session) => {
         .select()
         .single();
 
+
       if (newProfile) {
         useAppStore.getState().setUser({
           id: session.user.id,
           dbId: newProfile.id,
-          role: newProfile.appRole || pendingRole,
+          role: newProfile.appRole as 'student' | 'teacher',
           name: newProfile.name || session.user.user_metadata?.full_name || 'User',
           email: session.user.email || '',
           xp: newProfile.xp || 0
         });
         localStorage.removeItem('pending_role');
       } else {
-        // Fallback
+        // Fallback if profile creation failed
         useAppStore.getState().setUser({
           id: session.user.id,
           dbId: 0,
-          role: pendingRole,
+          role: pendingRole as 'student' | 'teacher',
           name: session.user.user_metadata?.full_name || 'User',
           email: session.user.email || '',
           xp: 0
@@ -123,6 +131,7 @@ supabase.auth.onAuthStateChange(async (_event, session) => {
   } else {
     useAppStore.getState().setUser(null);
   }
+
   useAppStore.getState().setInitializing(false);
 });
 

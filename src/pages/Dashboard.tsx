@@ -25,7 +25,7 @@ const GRADIENTS = [
 ];
 
 export const Dashboard = () => {
-  const { user } = useAppStore();
+  const { user, isInitializing } = useAppStore();
   const t = useT();
   const [classes, setClasses] = useState<ClassroomData[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -68,24 +68,50 @@ export const Dashboard = () => {
   };
 
   useEffect(() => {
-    if (!user) return;
+    // Only fetch if we have a user AND initialization is done
+    if (!user || isInitializing) return;
 
+    console.log('🚀 Supabase Ready. Fetching data for:', user.email);
+    
     const fetchClasses = async () => {
       try {
         const dbId = await ensureDbId();
+        console.log('🔍 Current User DB ID:', dbId);
+        console.log('🔍 Current User Role:', user.role);
 
         let data: ClassroomData[] | null = null;
         if (user.role === 'teacher') {
           const result = await supabase.from('classrooms').select('*').eq('teacherId', dbId);
+          console.log('🔍 Teacher Classes:', result.data);
           data = result.data;
         } else {
-          const { data: enrolled } = await supabase.from('enrollments').select('classroomId').eq('studentId', dbId);
+          // 1. Fetch Enrollments
+          const { data: enrolled, error: enrollError } = await supabase
+            .from('enrollments')
+            .select('classroomId')
+            .eq('studentId', dbId);
+          
+          if (enrollError) console.error('❌ Enrollment Fetch Error:', enrollError);
+          console.log('🔍 Student Enrollments:', enrolled);
+          
           const classroomIds = enrolled?.map((e: any) => e.classroomId) || [];
+          
           if (classroomIds.length > 0) {
+            // 2. Fetch Classrooms
             const result = await supabase.from('classrooms').select('*').in('id', classroomIds);
             data = result.data;
+
+            // 3. Fetch Tasks (Assignments) for these classrooms
+            const { count: taskCount, error: taskError } = await supabase
+              .from('assignments')
+              .select('*', { count: 'exact', head: true })
+              .in('classroomId', classroomIds);
+            
+            if (taskError) console.error('❌ Task Fetch Error:', taskError);
+            setStats(prev => ({ ...prev, pendingAssignments: taskCount || 0 }));
           } else {
             data = [];
+            setStats(prev => ({ ...prev, pendingAssignments: 0 }));
           }
         }
 
@@ -108,8 +134,7 @@ export const Dashboard = () => {
     };
 
     fetchClasses();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user]);
+  }, [user, isInitializing]);
 
   const handleCreateClass = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -142,19 +167,41 @@ export const Dashboard = () => {
 
   const handleLookupClass = async (e: React.FormEvent) => {
     e.preventDefault();
+    const trimmedCode = joinCode.trim().toUpperCase();
+    console.log('🔍 Looking up class code:', trimmedCode);
+    
     setErrorMsg('');
     setIsSubmitting(true);
+    setFoundClass(null);
+
     try {
-      const trimmedCode = joinCode.trim().toUpperCase();
-      const { data: classroom } = await supabase.from('classrooms').select('*').eq('joinCode', trimmedCode).single();
+      // Check if we have a session
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        setErrorMsg('Your session has expired. Please log in again.');
+        return;
+      }
+
+      const { data: classroom, error } = await supabase
+        .from('classrooms')
+        .select('*')
+        .eq('joinCode', trimmedCode)
+        .maybeSingle(); // maybeSingle is safer than .single()
+
+      if (error) throw error;
+
       if (!classroom) {
+        console.warn('⚠️ Class not found for code:', trimmedCode);
         setErrorMsg('Class not found. Make sure the code is correct.');
         return;
       }
+
+      console.log('✅ Class found:', classroom);
       setFoundClass(classroom);
       const classSections = classroom.section ? classroom.section.split(',').filter((s: string) => s.trim()) : [];
       if (classSections.length === 1) setJoinSection(classSections[0]);
     } catch (error: any) {
+      console.error('❌ Lookup Error:', error);
       setErrorMsg(error.message || 'Error looking up class.');
     } finally {
       setIsSubmitting(false);
@@ -183,6 +230,8 @@ export const Dashboard = () => {
       setJoinCode('');
       setJoinSection('');
       setFoundClass(null);
+      
+      // Refresh classes
       const { data: enrolled } = await supabase.from('enrollments').select('classroomId').eq('studentId', currentDbId);
       const classroomIds = enrolled?.map((e: any) => e.classroomId) || [];
       if (classroomIds.length > 0) {

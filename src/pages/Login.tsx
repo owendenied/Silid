@@ -182,8 +182,19 @@ export const Login = () => {
             </div>
             <div className="mt-5">
               <button onClick={async () => {
-                localStorage.setItem('pending_role', role);
-                const { error } = await supabase.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: `${window.location.origin}/dashboard` } });
+                const currentRole = role; // Capture current state
+                localStorage.setItem('pending_role', currentRole);
+                
+                const { error } = await supabase.auth.signInWithOAuth({ 
+                  provider: 'google', 
+                  options: { 
+                    redirectTo: `${window.location.origin}/dashboard`,
+                    queryParams: {
+                      access_type: 'offline',
+                      prompt: 'select_account'
+                    }
+                  } 
+                });
                 if (error) setError(error.message);
               }} className="w-full flex items-center justify-center gap-3 py-3 border border-gray-200 rounded-xl bg-white text-sm font-bold text-gray-700 hover:bg-gray-50 transition-smooth btn-press shadow-soft">
                 <img className="h-5 w-5" src="https://www.svgrepo.com/show/475656/google-color.svg" alt="Google" />

@@ -267,4 +267,23 @@ export const localDb = {
   channel: (_name: string) => dummyChannel,
   removeChannel: (_channel: any) => {},
   storage: dummyStorage,
+  
+  // Helper to bulk update local storage from Supabase
+  upsertTable: (table: string, data: any[]) => {
+    const db = getDb();
+    const existing = (db as any)[table] || [];
+    
+    for (const row of data) {
+      const idx = existing.findIndex((item: any) => item.id === row.id);
+      if (idx >= 0) {
+        existing[idx] = { ...existing[idx], ...row };
+      } else {
+        existing.push(row);
+      }
+    }
+    
+    (db as any)[table] = existing;
+    saveDb(db);
+  }
 };
+
