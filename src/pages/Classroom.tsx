@@ -91,7 +91,7 @@ export const Classroom = () => {
 
   const handleCreateClasswork = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!user || user.role !== 'teacher' || !id) return;
+    if (!user || user.id !== classroom?.teacherId || !id) return;
     setIsSubmitting(true);
 
     try {
@@ -181,7 +181,7 @@ export const Classroom = () => {
           <h1 className="text-4xl font-bold mb-2">{classroom.name}</h1>
           <p className="text-lg text-white/90">{classroom.section}</p>
         </div>
-        {user?.role === 'teacher' && (
+        {user?.id === classroom.teacherId && (
           <div className="absolute top-4 right-4 bg-black/20 px-4 py-2 rounded-lg text-sm font-mono backdrop-blur-sm">
             Class Code: <span className="font-bold text-white ml-2 text-lg">{classroom.inviteCode}</span>
           </div>
@@ -223,7 +223,7 @@ export const Classroom = () => {
               </div>
             </div>
             <div className="lg:col-span-3 space-y-4">
-              {user?.role === 'teacher' && (
+              {user?.id === classroom?.teacherId && (
                 <div 
                   onClick={() => setIsAnnouncementModalOpen(true)}
                   className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm flex items-center gap-4 cursor-pointer hover:bg-gray-50 transition-colors text-gray-500"
@@ -262,7 +262,7 @@ export const Classroom = () => {
 
         {activeTab === 'classwork' && (
           <div className="space-y-6">
-            {user?.role === 'teacher' && (
+            {user?.id === classroom?.teacherId && (
               <div className="flex gap-4">
                 <button 
                   onClick={() => setIsModalOpen(true)}

@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { Plus, Users, BookOpen, Clock, X } from 'lucide-react';
 import { useAppStore } from '../store/useAppStore';
 import { db } from '../lib/firebase';
-import { collection, addDoc, query, where, onSnapshot, serverTimestamp, getDocs, updateDoc, arrayUnion, doc } from 'firebase/firestore';
+import { collection, addDoc, query, where, onSnapshot, serverTimestamp, getDocs, updateDoc, arrayUnion, doc, or } from 'firebase/firestore';
 
 interface ClassroomData {
   id: string;
@@ -36,9 +36,13 @@ export const Dashboard = () => {
 
     // Listen to classes where user is teacher OR student
     // For now, let's just do teacher or all if student is joined
-    const q = user.role === 'teacher' 
-      ? query(collection(db, 'classrooms'), where('teacherId', '==', user.id))
-      : query(collection(db, 'classrooms'), where('students', 'array-contains', user.id));
+    const q = query(
+      collection(db, 'classrooms'), 
+      or(
+        where('teacherId', '==', user.id),
+        where('students', 'array-contains', user.id)
+      )
+    );
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const classData: ClassroomData[] = [];
@@ -84,7 +88,7 @@ export const Dashboard = () => {
 
   const handleJoinClass = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!user || user.role !== 'student') return;
+    if (!user) return;
     setIsSubmitting(true);
 
     try {
@@ -173,7 +177,7 @@ export const Dashboard = () => {
                   <p className="text-white/90 relative z-10 text-sm">{cls.section}</p>
                 </div>
                 <div className="p-4 space-y-3">
-                  {user?.role === 'teacher' && (
+                  {cls.teacherId === user?.id && (
                     <div className="flex items-center gap-2 text-sm text-gray-600">
                       <Users size={16} />
                       <span>{cls.students?.length || 0} Mag-aaral</span>

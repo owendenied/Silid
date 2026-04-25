@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useAppStore } from '../store/useAppStore';
 import { Award, Star, Flame, Trophy, Target, BookOpen, Users, LayoutDashboard, Settings } from 'lucide-react';
 import { db } from '../lib/firebase';
-import { doc, onSnapshot, collection, query, where, getDocs } from 'firebase/firestore';
+import { doc, onSnapshot, collection, query, where, getDocs, or } from 'firebase/firestore';
 import { getLevelInfo, calculateProgress } from '../lib/levels';
 
 export const Profile = () => {
@@ -25,13 +25,22 @@ export const Profile = () => {
 
     // Fetch stats
     const fetchStats = async () => {
+      const qClasses = query(
+        collection(db, 'classrooms'), 
+        or(
+          where('teacherId', '==', user.id),
+          where('students', 'array-contains', user.id)
+        )
+      );
+      const snapshotClasses = await getDocs(qClasses);
+      const classCount = snapshotClasses.size;
+      
       if (user.role === 'teacher') {
-        const q = query(collection(db, 'classrooms'), where('teacherId', '==', user.id));
-        const snapshot = await getDocs(q);
-        const classCount = snapshot.size;
         let studentCount = 0;
-        snapshot.forEach(doc => {
-          studentCount += (doc.data().students?.length || 0);
+        snapshotClasses.forEach(doc => {
+          if (doc.data().teacherId === user.id) {
+            studentCount += (doc.data().students?.length || 0);
+          }
         });
         setStats(prev => ({ ...prev, classes: classCount, students: studentCount }));
       } else {
