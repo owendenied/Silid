@@ -3,7 +3,7 @@
 // ============================================================
 
 const DB_KEY = 'silid_local_db';
-const SEEDED_KEY = 'silid_seeded_v3';
+const SEEDED_KEY = 'silid_seeded_v4';
 
 interface SeedDb {
   users: any[];
@@ -72,11 +72,11 @@ export function seedDemoData() {
 
   // Create classrooms
   const classroomsData = [
-    { name: 'Araling Panlipunan 10', section: 'Rizal', teacherIdx: 0, code: 'AP10RZ' },
-    { name: 'Mathematics 9', section: 'Mabini', teacherIdx: 1, code: 'MA9MBN' },
-    { name: 'English Literature 10', section: 'Bonifacio', teacherIdx: 2, code: 'EL10BN' },
-    { name: 'Filipino 9', section: 'Luna', teacherIdx: 0, code: 'FL9LNA' },
-    { name: 'Science 10', section: 'Aguinaldo', teacherIdx: 1, code: 'SC10AG' },
+    { name: 'Araling Panlipunan 10', section: 'Rizal,Mabini,Luna', teacherIdx: 0, code: 'AP10RZ' },
+    { name: 'Mathematics 9', section: 'Mabini,Bonifacio', teacherIdx: 1, code: 'MA9MBN' },
+    { name: 'English Literature 10', section: 'Bonifacio,Aguinaldo', teacherIdx: 2, code: 'EL10BN' },
+    { name: 'Filipino 9', section: 'Luna,Rizal', teacherIdx: 0, code: 'FL9LNA' },
+    { name: 'Science 10', section: 'Aguinaldo,Mabini,Rizal', teacherIdx: 1, code: 'SC10AG' },
   ];
 
   const classrooms = classroomsData.map((cls, i) => ({
@@ -97,10 +97,13 @@ export function seedDemoData() {
     const numClasses = 2 + (si % 2);
     for (let j = 0; j < numClasses; j++) {
       const classIdx = (si + j) % classrooms.length;
+      const sections = classrooms[classIdx].section.split(',');
+      const section = sections[si % sections.length];
       enrollments.push({
         id: enrollId++,
         classroomId: classrooms[classIdx].id,
         studentId: student.id,
+        section,
         createdAt: new Date(Date.now() - 20 * 86400000).toISOString(),
         updatedAt: new Date().toISOString(),
       });

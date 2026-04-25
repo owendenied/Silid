@@ -1,9 +1,11 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { PlusCircle, Sparkles, MessageSquare, Users, BookOpen, Clock, X, CheckCircle2, GraduationCap } from 'lucide-react';
+import { PlusCircle, Sparkles, MessageSquare, Users, BookOpen, Clock, X, CheckCircle2, GraduationCap, Download, FileText } from 'lucide-react';
 import { useAppStore } from '../store/useAppStore';
 import { supabase } from '../lib/supabase';
 import { useT } from '../lib/i18n';
+import { generateLessonPlan } from '../lib/ai';
+import { exportLessonPlanToPDF } from '../lib/pdfExport';
 
 interface ClassroomData {
   id: number;
@@ -28,15 +30,26 @@ export const Dashboard = () => {
   const [classes, setClasses] = useState<ClassroomData[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [newClassName, setNewClassName] = useState('');
-  const [newSection, setNewSection] = useState('');
+  const [sections, setSections] = useState<string[]>([]);
+  const [sectionInput, setSectionInput] = useState('');
   const [joinCode, setJoinCode] = useState('');
+  const [joinSection, setJoinSection] = useState('');
+  const [foundClass, setFoundClass] = useState<any>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   const [stats, setStats] = useState({ totalStudents: 0, pendingGradings: 0, pendingAssignments: 0 });
 
+  // AI Lesson Plan state
+  const [isAIModalOpen, setIsAIModalOpen] = useState(false);
+  const [aiTopic, setAiTopic] = useState('');
+  const [aiGrade, setAiGrade] = useState('');
+  const [selectedClassId, setSelectedClassId] = useState<number | ''>('');
+  const [generatedPlan, setGeneratedPlan] = useState('');
+  const [isGenerating, setIsGenerating] = useState(false);
+
   const ensureDbId = async (): Promise<number> => {
     if (!user) throw new Error('Not logged in');
-    let currentDbId = user.dbId;
+    const currentDbId = user.dbId;
     if (currentDbId && currentDbId !== 0) return currentDbId;
 
     let { data } = await supabase.from('users').select('id').eq('openId', user.id).single();
@@ -95,6 +108,7 @@ export const Dashboard = () => {
     };
 
     fetchClasses();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
 
   const handleCreateClass = async (e: React.FormEvent) => {
@@ -108,13 +122,14 @@ export const Dashboard = () => {
       const newJoinCode = Math.random().toString(36).substring(2, 8).toUpperCase().padEnd(6, 'X');
 
       const { error: insertError } = await supabase.from('classrooms').insert([{
-        name: newClassName, section: newSection, teacherId: currentDbId, joinCode: newJoinCode
+        name: newClassName, section: sections.join(','), teacherId: currentDbId, joinCode: newJoinCode
       }]);
       if (insertError) throw new Error(insertError.message);
 
       setIsModalOpen(false);
       setNewClassName('');
-      setNewSection('');
+      setSections([]);
+      setSectionInput('');
 
       const { data: refreshData } = await supabase.from('classrooms').select('*').eq('teacherId', currentDbId);
       setClasses(refreshData || []);
@@ -125,39 +140,49 @@ export const Dashboard = () => {
     }
   };
 
-  const handleJoinClass = async (e: React.FormEvent) => {
+  const handleLookupClass = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!user) return;
-    setIsSubmitting(true);
     setErrorMsg('');
-
+    setIsSubmitting(true);
     try {
-      const currentDbId = await ensureDbId();
       const trimmedCode = joinCode.trim().toUpperCase();
-
       const { data: classroom } = await supabase.from('classrooms').select('*').eq('joinCode', trimmedCode).single();
       if (!classroom) {
         setErrorMsg('Class not found. Make sure the code is correct.');
-        setIsSubmitting(false);
         return;
       }
+      setFoundClass(classroom);
+      const classSections = classroom.section ? classroom.section.split(',').filter((s: string) => s.trim()) : [];
+      if (classSections.length === 1) setJoinSection(classSections[0]);
+    } catch (error: any) {
+      setErrorMsg(error.message || 'Error looking up class.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
-      const { data: existing } = await supabase.from('enrollments').select('*').eq('classroomId', classroom.id).eq('studentId', currentDbId).single();
+  const handleJoinClass = async () => {
+    if (!user || !foundClass) return;
+    setIsSubmitting(true);
+    setErrorMsg('');
+    try {
+      const currentDbId = await ensureDbId();
+      const { data: existing } = await supabase.from('enrollments').select('*').eq('classroomId', foundClass.id).eq('studentId', currentDbId).single();
       if (existing) {
         setErrorMsg('You are already enrolled in this class.');
         setIsSubmitting(false);
         return;
       }
-
       const { error: enrollError } = await supabase.from('enrollments').insert([{
-        classroomId: classroom.id,
-        studentId: currentDbId
+        classroomId: foundClass.id,
+        studentId: currentDbId,
+        section: joinSection || null
       }]);
       if (enrollError) throw enrollError;
-
       setIsModalOpen(false);
       setJoinCode('');
-
+      setJoinSection('');
+      setFoundClass(null);
       const { data: enrolled } = await supabase.from('enrollments').select('classroomId').eq('studentId', currentDbId);
       const classroomIds = enrolled?.map((e: any) => e.classroomId) || [];
       if (classroomIds.length > 0) {
@@ -183,17 +208,28 @@ export const Dashboard = () => {
             {user?.role === 'teacher' ? t('dash.subtitle_teacher') : t('dash.subtitle_student')}
           </p>
         </div>
-        <button
-          onClick={() => setIsModalOpen(true)}
-          className={`flex items-center justify-center gap-2 px-8 py-3.5 rounded-2xl font-bold transition-smooth btn-press ${
-            user?.role === 'teacher'
-              ? 'bg-gradient-coral text-white shadow-glow-coral hover:scale-105'
-              : 'bg-gradient-gold text-white shadow-glow-gold hover:scale-105'
-          }`}
-        >
-          {user?.role === 'teacher' ? <PlusCircle size={22} /> : <Users size={22} />}
-          {user?.role === 'teacher' ? t('dash.new_class') : t('dash.join_class')}
-        </button>
+        <div className="flex gap-3">
+          {user?.role === 'teacher' && (
+            <button
+              onClick={() => setIsAIModalOpen(true)}
+              className="flex items-center justify-center gap-2 px-6 py-3.5 rounded-2xl font-bold transition-smooth btn-press bg-gradient-gold text-white shadow-glow-gold hover:scale-105"
+            >
+              <Sparkles size={22} />
+              AI Lesson Plan
+            </button>
+          )}
+          <button
+            onClick={() => setIsModalOpen(true)}
+            className={`flex items-center justify-center gap-2 px-8 py-3.5 rounded-2xl font-bold transition-smooth btn-press ${
+              user?.role === 'teacher'
+                ? 'bg-gradient-coral text-white shadow-glow-coral hover:scale-105'
+                : 'bg-gradient-gold text-white shadow-glow-gold hover:scale-105'
+            }`}
+          >
+            {user?.role === 'teacher' ? <PlusCircle size={22} /> : <Users size={22} />}
+            {user?.role === 'teacher' ? t('dash.new_class') : t('dash.join_class')}
+          </button>
+        </div>
       </div>
 
       {/* Stats */}
@@ -265,7 +301,9 @@ export const Dashboard = () => {
                     </div>
                     <div className="relative z-10">
                       <h3 className="text-xl font-extrabold font-display text-white truncate">{cls.name}</h3>
-                      <p className="text-white/80 font-medium text-sm">{cls.section}</p>
+                      <p className="text-white/80 font-medium text-sm">
+                        {cls.section ? `${cls.section.split(',').length} section${cls.section.split(',').length > 1 ? 's' : ''}: ${cls.section.split(',').join(', ')}` : 'No sections'}
+                      </p>
                     </div>
                   </div>
                   <div className="p-5 space-y-3">
@@ -307,7 +345,42 @@ export const Dashboard = () => {
                 </div>
                 <div>
                   <label className="block text-sm font-bold text-gray-700 mb-1.5">{t('dash.section')}</label>
-                  <input value={newSection} onChange={e => setNewSection(e.target.value)} type="text" placeholder={t('dash.section_placeholder')} className="w-full px-3.5 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[var(--color-silid-coral)]/20 focus:border-[var(--color-silid-coral)] outline-none transition-smooth bg-gray-50" />
+                  <div className="flex flex-wrap gap-2 mb-2">
+                    {sections.map((sec, i) => (
+                      <span key={i} className="inline-flex items-center gap-1 bg-[var(--color-silid-cream)] text-[var(--color-silid-coral)] px-3 py-1 rounded-full text-sm font-bold">
+                        {sec}
+                        <button type="button" onClick={() => setSections(sections.filter((_, j) => j !== i))} className="hover:text-red-700 transition-smooth"><X size={14} /></button>
+                      </span>
+                    ))}
+                  </div>
+                  <div className="flex gap-2">
+                    <input
+                      value={sectionInput}
+                      onChange={e => setSectionInput(e.target.value)}
+                      onKeyDown={e => {
+                        if (e.key === 'Enter' && sectionInput.trim()) {
+                          e.preventDefault();
+                          if (!sections.includes(sectionInput.trim())) {
+                            setSections([...sections, sectionInput.trim()]);
+                          }
+                          setSectionInput('');
+                        }
+                      }}
+                      type="text"
+                      placeholder={sections.length === 0 ? 'e.g. Rizal (press Enter to add)' : 'Add another section...'}
+                      className="flex-1 px-3.5 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[var(--color-silid-coral)]/20 focus:border-[var(--color-silid-coral)] outline-none transition-smooth bg-gray-50"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (sectionInput.trim() && !sections.includes(sectionInput.trim())) {
+                          setSections([...sections, sectionInput.trim()]);
+                          setSectionInput('');
+                        }
+                      }}
+                      className="px-3 py-2.5 bg-gray-100 text-gray-600 rounded-xl font-bold text-sm hover:bg-gray-200 transition-smooth btn-press"
+                    >+</button>
+                  </div>
                 </div>
                 <div className="pt-4 flex gap-3 justify-end">
                   <button type="button" onClick={() => { setIsModalOpen(false); setErrorMsg(''); }} className="px-5 py-2.5 text-gray-600 font-bold hover:bg-gray-100 rounded-xl transition-smooth btn-press">{t('cancel')}</button>
@@ -317,20 +390,182 @@ export const Dashboard = () => {
                 </div>
               </form>
             ) : (
-              <form onSubmit={handleJoinClass} className="p-6 space-y-4">
+              <div className="p-6 space-y-4">
                 {errorMsg && <div className="bg-red-50 text-red-600 p-3 rounded-xl text-sm font-medium">{errorMsg}</div>}
-                <p className="text-gray-600">{t('dash.join_prompt')}</p>
-                <div>
-                  <input type="text" required value={joinCode} onChange={e => setJoinCode(e.target.value)} placeholder="Class Code (e.g. X7P9M2)" className="w-full px-3.5 py-3 border border-gray-200 rounded-xl text-lg uppercase tracking-wider font-mono focus:ring-2 focus:ring-[var(--color-silid-coral)]/20 focus:border-[var(--color-silid-coral)] outline-none transition-smooth bg-gray-50" />
-                </div>
-                <div className="flex gap-3 justify-end pt-2">
-                  <button type="button" onClick={() => { setIsModalOpen(false); setErrorMsg(''); }} className="px-5 py-2.5 text-gray-600 font-bold hover:bg-gray-100 rounded-xl transition-smooth btn-press">{t('cancel')}</button>
-                  <button type="submit" disabled={isSubmitting} className="px-5 py-2.5 bg-gradient-coral text-white font-bold rounded-xl hover:scale-105 disabled:opacity-50 transition-smooth shadow-glow-coral btn-press">
-                    {isSubmitting ? t('dash.joining') : t('dash.join')}
-                  </button>
-                </div>
-              </form>
+                {!foundClass ? (
+                  <form onSubmit={handleLookupClass} className="space-y-4">
+                    <p className="text-gray-600">{t('dash.join_prompt')}</p>
+                    <div>
+                      <input type="text" required value={joinCode} onChange={e => setJoinCode(e.target.value)} placeholder="Class Code (e.g. X7P9M2)" className="w-full px-3.5 py-3 border border-gray-200 rounded-xl text-lg uppercase tracking-wider font-mono focus:ring-2 focus:ring-[var(--color-silid-coral)]/20 focus:border-[var(--color-silid-coral)] outline-none transition-smooth bg-gray-50" />
+                    </div>
+                    <div className="flex gap-3 justify-end pt-2">
+                      <button type="button" onClick={() => { setIsModalOpen(false); setErrorMsg(''); setFoundClass(null); }} className="px-5 py-2.5 text-gray-600 font-bold hover:bg-gray-100 rounded-xl transition-smooth btn-press">{t('cancel')}</button>
+                      <button type="submit" disabled={isSubmitting} className="px-5 py-2.5 bg-gradient-coral text-white font-bold rounded-xl hover:scale-105 disabled:opacity-50 transition-smooth shadow-glow-coral btn-press">
+                        Find Class
+                      </button>
+                    </div>
+                  </form>
+                ) : (
+                  <div className="space-y-4">
+                    <div className="bg-green-50 border border-green-200 p-4 rounded-xl">
+                      <p className="font-bold text-green-800 text-lg">{foundClass.name}</p>
+                      <p className="text-green-600 text-sm">{foundClass.section ? `Sections: ${foundClass.section.split(',').join(', ')}` : 'No sections'}</p>
+                    </div>
+                    {foundClass.section && foundClass.section.split(',').length > 1 && (
+                      <div>
+                        <label className="block text-sm font-bold text-gray-700 mb-1.5">Pumili ng section mo</label>
+                        <select
+                          required
+                          value={joinSection}
+                          onChange={e => setJoinSection(e.target.value)}
+                          className="w-full px-3.5 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[var(--color-silid-coral)]/20 focus:border-[var(--color-silid-coral)] outline-none transition-smooth bg-gray-50"
+                        >
+                          <option value="">— Pumili ng section —</option>
+                          {foundClass.section.split(',').map((sec: string) => (
+                            <option key={sec.trim()} value={sec.trim()}>{sec.trim()}</option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+                    <div className="flex gap-3 justify-end pt-2">
+                      <button type="button" onClick={() => { setFoundClass(null); setJoinSection(''); setErrorMsg(''); }} className="px-5 py-2.5 text-gray-600 font-bold hover:bg-gray-100 rounded-xl transition-smooth btn-press">Back</button>
+                      <button
+                        onClick={handleJoinClass}
+                        disabled={isSubmitting || (foundClass.section && foundClass.section.split(',').length > 1 && !joinSection)}
+                        className="px-5 py-2.5 bg-gradient-coral text-white font-bold rounded-xl hover:scale-105 disabled:opacity-50 transition-smooth shadow-glow-coral btn-press"
+                      >
+                        {isSubmitting ? t('dash.joining') : t('dash.join')}
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* AI Lesson Plan Modal */}
+      {isAIModalOpen && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-2xl w-full max-w-2xl overflow-hidden shadow-2xl animate-fade-up">
+            <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-gradient-to-r from-[var(--color-silid-coral)] to-[#F5A623] text-white">
+              <div className="flex items-center gap-2">
+                <FileText size={24} />
+                <h3 className="text-xl font-extrabold font-display">AI Lesson Plan Generator</h3>
+              </div>
+              <button onClick={() => { setIsAIModalOpen(false); setGeneratedPlan(''); }} className="p-2 hover:bg-white/10 rounded-full transition-smooth">
+                <X size={20} />
+              </button>
+            </div>
+            
+            <div className="p-6">
+              {!generatedPlan ? (
+                <form onSubmit={async (e) => {
+                  e.preventDefault();
+                  setIsGenerating(true);
+                  try {
+                    const selectedClass = classes.find(c => c.id === selectedClassId);
+                    const plan = await generateLessonPlan(aiTopic, `${selectedClass?.name || ''} - ${aiGrade}`);
+                    setGeneratedPlan(plan);
+                  } catch (err) {
+                    console.error('AI error:', err);
+                    setGeneratedPlan('Could not generate lesson plan. Please try again.');
+                  } finally {
+                    setIsGenerating(false);
+                  }
+                }} className="space-y-4">
+                  <p className="text-gray-600 text-sm">Pumili ng klase at i-type ang topic — gagawan ka ng detailed lesson plan na pwedeng i-download bilang PDF.</p>
+                  
+                  <div>
+                    <label className="block text-sm font-bold text-gray-700 mb-1.5">Class</label>
+                    <select
+                      required
+                      value={selectedClassId}
+                      onChange={e => setSelectedClassId(e.target.value ? Number(e.target.value) : '')}
+                      className="w-full px-3.5 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[var(--color-silid-coral)]/20 focus:border-[var(--color-silid-coral)] outline-none transition-smooth bg-gray-50"
+                    >
+                      <option value="">— Pumili ng klase —</option>
+                      {classes.map(cls => (
+                        <option key={cls.id} value={cls.id}>{cls.name}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-bold text-gray-700 mb-1.5">Grade Level</label>
+                    <input 
+                      required
+                      value={aiGrade}
+                      onChange={e => setAiGrade(e.target.value)}
+                      placeholder="e.g. Grade 7" 
+                      className="w-full px-3.5 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[var(--color-silid-coral)]/20 focus:border-[var(--color-silid-coral)] outline-none transition-smooth bg-gray-50"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-bold text-gray-700 mb-1.5">Topic / Paksa</label>
+                    <input 
+                      required
+                      value={aiTopic}
+                      onChange={e => setAiTopic(e.target.value)}
+                      placeholder="Anong paksa ang ituturo mo?" 
+                      className="w-full px-3.5 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[var(--color-silid-coral)]/20 focus:border-[var(--color-silid-coral)] outline-none transition-smooth bg-gray-50"
+                    />
+                  </div>
+
+                  <div className="pt-4">
+                    <button 
+                      type="submit"
+                      disabled={isGenerating}
+                      className="w-full bg-gradient-coral text-white py-3 rounded-xl font-bold hover:scale-[1.02] disabled:opacity-50 transition-smooth shadow-glow-coral btn-press"
+                    >
+                      {isGenerating ? (
+                        <span className="flex items-center justify-center gap-2">
+                          <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></span>
+                          Nag-ge-generate...
+                        </span>
+                      ) : 'I-generate ang Lesson Plan ✨'}
+                    </button>
+                  </div>
+                </form>
+              ) : (
+                <div className="space-y-4">
+                  <div className="flex items-center gap-2 text-sm text-gray-500 font-medium">
+                    <BookOpen size={16} />
+                    <span>Lesson Plan para sa: <strong className="text-gray-800">{classes.find(c => c.id === selectedClassId)?.name || aiTopic}</strong></span>
+                  </div>
+                  <div className="bg-gray-50 p-6 rounded-xl border border-gray-200 max-h-[400px] overflow-y-auto">
+                    <div className="prose prose-sm max-w-none">
+                      <pre className="whitespace-pre-wrap font-sans text-gray-800">{generatedPlan}</pre>
+                    </div>
+                  </div>
+                  <div className="flex gap-3">
+                    <button 
+                      onClick={() => {
+                        const selectedClass = classes.find(c => c.id === selectedClassId);
+                        exportLessonPlanToPDF({
+                          plan: generatedPlan,
+                          topic: aiTopic,
+                          subject: selectedClass?.name,
+                          grade: aiGrade,
+                        });
+                      }}
+                      className="flex-1 bg-gradient-coral text-white py-3 rounded-xl font-bold hover:scale-[1.02] transition-smooth shadow-glow-coral btn-press flex items-center justify-center gap-2"
+                    >
+                      <Download size={18} />
+                      Download as PDF
+                    </button>
+                    <button 
+                      onClick={() => setGeneratedPlan('')}
+                      className="px-6 py-3 border border-gray-200 rounded-xl font-bold hover:bg-gray-50 transition-smooth btn-press"
+                    >
+                      Ulitin
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}

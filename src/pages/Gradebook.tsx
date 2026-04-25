@@ -17,6 +17,9 @@ export const Gradebook = () => {
   const [assignments, setAssignments] = useState<any[]>([]);
   const [submissions, setSubmissions] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [classSections, setClassSections] = useState<string[]>([]);
+  const [sectionFilter, setSectionFilter] = useState('all');
+  const [enrollmentSections, setEnrollmentSections] = useState<Record<number, string>>({});
 
   useEffect(() => {
     if (!classId || !user) return;
@@ -24,11 +27,19 @@ export const Gradebook = () => {
       try {
         // Get classroom
         const { data: cls } = await supabase.from('classrooms').select('*').eq('id', Number(classId)).single();
-        if (cls) setClassroomName(cls.name);
+        if (cls) {
+          setClassroomName(cls.name);
+          if (cls.section) setClassSections(cls.section.split(',').map((s: string) => s.trim()).filter(Boolean));
+        }
 
-        // Get enrolled students
-        const { data: enrollments } = await supabase.from('enrollments').select('studentId').eq('classroomId', Number(classId));
-        const sIds = enrollments?.map((e: any) => e.studentId) || [];
+        // Get enrolled students with sections
+        const { data: enrollments } = await supabase.from('enrollments').select('studentId,section').eq('classroomId', Number(classId));
+        const sectionMap: Record<number, string> = {};
+        const sIds = enrollments?.map((e: any) => {
+          if (e.section) sectionMap[e.studentId] = e.section;
+          return e.studentId;
+        }) || [];
+        setEnrollmentSections(sectionMap);
         if (sIds.length > 0) {
           const { data: studentsData } = await supabase.from('users').select('*').in('id', sIds);
           setStudents(studentsData || []);
@@ -79,15 +90,16 @@ export const Gradebook = () => {
   };
 
   const classAverage = (): number => {
-    if (students.length === 0 || assignments.length === 0) return 0;
+    const filtered = sectionFilter === 'all' ? students : students.filter(s => enrollmentSections[s.id] === sectionFilter);
+    if (filtered.length === 0 || assignments.length === 0) return 0;
     const totalPossible = assignments.reduce((acc: number, a: any) => acc + a.points, 0);
     if (totalPossible === 0) return 0;
     let totalEarned = 0;
-    students.forEach(s => {
+    filtered.forEach(s => {
       const { earned } = getStudentTotal(s.id);
       totalEarned += earned;
     });
-    return Math.round((totalEarned / (totalPossible * students.length)) * 100);
+    return Math.round((totalEarned / (totalPossible * filtered.length)) * 100);
   };
 
   const exportCSV = () => {
@@ -144,14 +156,38 @@ export const Gradebook = () => {
         </button>
       </div>
 
+      {/* Section Filter */}
+      {classSections.length > 1 && (
+        <div className="flex flex-wrap gap-2">
+          <button
+            onClick={() => setSectionFilter('all')}
+            className={`px-3 py-1.5 rounded-full text-xs font-bold transition-smooth btn-press ${sectionFilter === 'all' ? 'bg-[var(--color-silid-coral)] text-white shadow-glow-coral' : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'}`}
+          >
+            All Sections ({students.length})
+          </button>
+          {classSections.map(sec => {
+            const count = students.filter(s => enrollmentSections[s.id] === sec).length;
+            return (
+              <button
+                key={sec}
+                onClick={() => setSectionFilter(sec)}
+                className={`px-3 py-1.5 rounded-full text-xs font-bold transition-smooth btn-press ${sectionFilter === sec ? 'bg-[var(--color-silid-coral)] text-white shadow-glow-coral' : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'}`}
+              >
+                {sec} ({count})
+              </button>
+            );
+          })}
+        </div>
+      )}
+
       {/* Stats Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <div className="bg-white p-5 rounded-2xl shadow-soft border border-gray-100/50">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-gradient-coral text-white flex items-center justify-center"><Users size={18} /></div>
             <div>
-              <p className="text-2xl font-extrabold font-display">{students.length}</p>
-              <p className="text-xs text-gray-500 font-bold uppercase tracking-wider">Students</p>
+              <p className="text-2xl font-extrabold font-display">{sectionFilter === 'all' ? students.length : students.filter(s => enrollmentSections[s.id] === sectionFilter).length}</p>
+              <p className="text-xs text-gray-500 font-bold uppercase tracking-wider">Students{sectionFilter !== 'all' ? ` (${sectionFilter})` : ''}</p>
             </div>
           </div>
         </div>
@@ -202,10 +238,12 @@ export const Gradebook = () => {
               </tr>
             </thead>
             <tbody>
-              {students.length === 0 ? (
-                <tr><td colSpan={assignments.length + 3} className="text-center py-12 text-gray-400">No students enrolled</td></tr>
+              {(() => {
+                const filtered = sectionFilter === 'all' ? students : students.filter(s => enrollmentSections[s.id] === sectionFilter);
+                return filtered.length === 0 ? (
+                <tr><td colSpan={assignments.length + 3} className="text-center py-12 text-gray-400">No students{sectionFilter !== 'all' ? ` in section ${sectionFilter}` : ' enrolled'}</td></tr>
               ) : (
-                students.sort((a, b) => a.name.localeCompare(b.name)).map((student, idx) => {
+                filtered.sort((a, b) => a.name.localeCompare(b.name)).map((student, idx) => {
                   const { earned, possible } = getStudentTotal(student.id);
                   const pct = possible > 0 ? Math.round((earned / possible) * 100) : 0;
                   return (
@@ -245,12 +283,13 @@ export const Gradebook = () => {
                     </tr>
                   );
                 })
-              )}
+              );
+              })()}
             </tbody>
             {students.length > 0 && (
               <tfoot>
                 <tr className="bg-gray-50 border-t-2 border-gray-200">
-                  <td className="px-4 py-3 font-bold text-sm text-gray-700 sticky left-0 bg-gray-50 z-10">Class Average</td>
+                  <td className="px-4 py-3 font-bold text-sm text-gray-700 sticky left-0 bg-gray-50 z-10">{sectionFilter === 'all' ? 'Class' : sectionFilter} Average</td>
                   {assignments.map(a => (
                     <td key={a.id} className="text-center px-3 py-3">
                       <span className="text-xs font-bold text-gray-600">{getAssignmentAvg(a.id)}/{a.points}</span>

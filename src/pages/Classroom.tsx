@@ -1,10 +1,10 @@
 import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useAppStore } from '../store/useAppStore';
-import { Download, FileText, Plus, X, BookOpen, Sparkles, Megaphone, Send, Paperclip, BarChart3 } from 'lucide-react';
+import { Download, FileText, Plus, X, BookOpen, Megaphone, Send, Paperclip, BarChart3, Wand2 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useT } from '../lib/i18n';
-import { generateLessonPlan } from '../lib/ai';
+import { generateModuleContent } from '../lib/ai';
 import { validateAnswerKey } from '../lib/autoChecker';
 
 interface Classwork {
@@ -41,16 +41,22 @@ export const Classroom = () => {
   const [enrolledStudents, setEnrolledStudents] = useState<any[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isAnnouncementModalOpen, setIsAnnouncementModalOpen] = useState(false);
-  const [isAIModalOpen, setIsAIModalOpen] = useState(false);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [csvFile, setCsvFile] = useState<File | null>(null);
   const [importStatus, setImportStatus] = useState('');
   
-  // AI Generator state
-  const [aiTopic, setAiTopic] = useState('');
-  const [aiGrade, setAiGrade] = useState('');
-  const [aiSubject, setAiSubject] = useState('');
-  const [generatedPlan, setGeneratedPlan] = useState('');
+  // AI Module Generator state
+  const [isAIModuleModalOpen, setIsAIModuleModalOpen] = useState(false);
+  const [aiModuleTopic, setAiModuleTopic] = useState('');
+  const [aiModuleGrade, setAiModuleGrade] = useState('');
+  const [aiModuleSubject, setAiModuleSubject] = useState('');
+  const [generatedModule, setGeneratedModule] = useState<{ title: string; content: string } | null>(null);
+  const [isGeneratingModule, setIsGeneratingModule] = useState(false);
+
+  // Section filter state
+  const [sectionFilter, setSectionFilter] = useState('all');
+  const [enrollmentSections, setEnrollmentSections] = useState<Record<number, string>>({});
+  const [addSectionInput, setAddSectionInput] = useState('');
   
   // Form state
   const [newType, setNewType] = useState<'module' | 'quiz' | 'true_false' | 'identification' | 'short_answer' | 'essay'>('quiz');
@@ -112,14 +118,19 @@ export const Classroom = () => {
 
     fetchAnnouncements();
 
-    // Fetch enrolled students
+    // Fetch enrolled students with section data
     const fetchEnrolled = async () => {
       const { data: enrollments } = await supabase
         .from('enrollments')
-        .select('studentId')
+        .select('studentId,section')
         .eq('classroomId', Number(id));
       
       if (enrollments && enrollments.length > 0) {
+        const sectionMap: Record<number, string> = {};
+        enrollments.forEach((e: any) => {
+          if (e.section) sectionMap[e.studentId] = e.section;
+        });
+        setEnrollmentSections(sectionMap);
         const studentIds = enrollments.map((e: any) => e.studentId);
         const { data: students } = await supabase
           .from('users')
@@ -128,6 +139,7 @@ export const Classroom = () => {
         setEnrolledStudents(students || []);
       } else {
         setEnrolledStudents([]);
+        setEnrollmentSections({});
       }
     };
     fetchEnrolled();
@@ -257,22 +269,6 @@ export const Classroom = () => {
     }
   };
 
-  const handleGenerateAIPlan = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsSubmitting(true);
-    setGeneratedPlan('');
-    
-    try {
-      const plan = await generateLessonPlan(aiTopic, `${aiSubject} - ${aiGrade}`);
-      setGeneratedPlan(plan);
-    } catch (err) {
-      console.error('AI error:', err);
-      setGeneratedPlan('Could not generate lesson plan. Please try again.');
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
   if (!classroom) {
     return <div className="text-center py-12 text-gray-500">{t('loading')}</div>;
   }
@@ -289,7 +285,33 @@ export const Classroom = () => {
         </div>
         <div className="relative z-10">
           <h1 className="text-3xl md:text-4xl font-extrabold font-display mb-1 truncate">{classroom.name}</h1>
-          <p className="text-white/80 font-medium">{classroom.section}</p>
+          <div className="flex flex-wrap items-center gap-2 mt-1">
+            {classroom.section ? classroom.section.split(',').map((sec: string) => (
+              <span key={sec.trim()} className="bg-white/20 text-white text-xs font-bold px-2.5 py-1 rounded-full backdrop-blur-sm">{sec.trim()}</span>
+            )) : <span className="text-white/60 text-sm">No sections</span>}
+            {isTeacher && (
+              <div className="flex items-center gap-1">
+                <input
+                  value={addSectionInput}
+                  onChange={e => setAddSectionInput(e.target.value)}
+                  onKeyDown={async e => {
+                    if (e.key === 'Enter' && addSectionInput.trim()) {
+                      e.preventDefault();
+                      const existing = classroom.section ? classroom.section.split(',').map((s: string) => s.trim()) : [];
+                      if (!existing.includes(addSectionInput.trim())) {
+                        const updated = [...existing, addSectionInput.trim()].join(',');
+                        await supabase.from('classrooms').update({ section: updated }).eq('id', classroom.id);
+                        setClassroom({ ...classroom, section: updated });
+                      }
+                      setAddSectionInput('');
+                    }
+                  }}
+                  placeholder="+ Add section"
+                  className="bg-white/20 text-white placeholder-white/50 text-xs font-bold px-2.5 py-1 rounded-full backdrop-blur-sm outline-none w-28 focus:bg-white/30 transition-smooth"
+                />
+              </div>
+            )}
+          </div>
         </div>
         {isTeacher && (
           <div className="absolute top-4 right-4 flex flex-wrap items-center gap-2">
@@ -450,11 +472,11 @@ export const Classroom = () => {
                   {t('class.add_module')}
                 </button>
                 <button 
-                  onClick={() => setIsAIModalOpen(true)}
-                  className="flex items-center gap-2 bg-gradient-gold text-white px-4 py-2 rounded-xl font-bold hover:scale-105 transition-smooth shadow-glow-gold btn-press"
+                  onClick={() => setIsAIModuleModalOpen(true)}
+                  className="flex items-center gap-2 bg-gradient-to-r from-purple-600 to-indigo-600 text-white px-4 py-2 rounded-xl font-bold hover:scale-105 transition-smooth shadow-sm btn-press"
                 >
-                  <Sparkles size={20} />
-                  {t('class.ai_generate')}
+                  <Wand2 size={20} />
+                  AI Module
                 </button>
               </div>
             )}
@@ -499,16 +521,22 @@ export const Classroom = () => {
                   {user?.name?.charAt(0) || 'T'}
                 </div>
                 <div>
-                  <span className="font-bold text-gray-900">{isTeacher ? user?.name : 'Teacher'}</span>
+                  <span className="font-bold text-gray-900">{isTeacher ? user?.name : teacherName}</span>
                   <p className="text-xs text-gray-500">{isTeacher ? user?.email : ''}</p>
                 </div>
               </div>
             </div>
             <div className="animate-fade-up" style={{ animationDelay: '100ms' }}>
+            <div className="bg-white rounded-2xl shadow-soft border border-gray-100/50 p-6">
               <div className="flex flex-wrap justify-between items-center mb-4 border-b-2 border-[var(--color-silid-coral)]/20 pb-2 gap-2">
                 <h2 className="text-xl font-extrabold font-display text-[var(--color-silid-coral)]">{t('class.students_list')}</h2>
                 <div className="flex items-center gap-3">
-                  <span className="text-sm font-bold text-gray-500">{enrolledStudents.length} students</span>
+                  <span className="text-sm font-bold text-gray-500">
+                    {sectionFilter === 'all'
+                      ? `${enrolledStudents.length} students`
+                      : `${enrolledStudents.filter(s => enrollmentSections[s.id] === sectionFilter).length} students`
+                    }
+                  </span>
                   {user?.dbId === classroom.teacherId && (
                     <button 
                       onClick={() => setIsImportModalOpen(true)}
@@ -520,23 +548,67 @@ export const Classroom = () => {
                   )}
                 </div>
               </div>
+
+              {/* Section filter pills */}
+              {classroom.section && classroom.section.split(',').length > 1 && (
+                <div className="flex flex-wrap gap-2 mb-4">
+                  <button
+                    onClick={() => setSectionFilter('all')}
+                    className={`px-3 py-1.5 rounded-full text-xs font-bold transition-smooth btn-press ${
+                      sectionFilter === 'all'
+                        ? 'bg-[var(--color-silid-coral)] text-white shadow-glow-coral'
+                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                    }`}
+                  >
+                    All ({enrolledStudents.length})
+                  </button>
+                  {classroom.section.split(',').map((sec: string) => {
+                    const count = enrolledStudents.filter(s => enrollmentSections[s.id] === sec.trim()).length;
+                    return (
+                      <button
+                        key={sec.trim()}
+                        onClick={() => setSectionFilter(sec.trim())}
+                        className={`px-3 py-1.5 rounded-full text-xs font-bold transition-smooth btn-press ${
+                          sectionFilter === sec.trim()
+                            ? 'bg-[var(--color-silid-coral)] text-white shadow-glow-coral'
+                            : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                        }`}
+                      >
+                        {sec.trim()} ({count})
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+
               <div className="space-y-2">
-                {enrolledStudents.length === 0 ? (
-                  <p className="text-gray-500 p-6 text-center">{t('class.no_students')}</p>
-                ) : (
-                  enrolledStudents.map((s: any, idx: number) => (
-                    <div key={s.id} className="flex items-center gap-4 p-3 bg-white hover:shadow-soft rounded-xl transition-smooth animate-fade-up border border-gray-100/50" style={{ animationDelay: `${idx * 30}ms` }}>
-                      <div className="w-9 h-9 rounded-lg bg-gradient-gold text-white flex items-center justify-center font-bold text-sm flex-shrink-0">
-                        {s.name?.charAt(0) || '?'}
+                {(() => {
+                  const filtered = sectionFilter === 'all'
+                    ? enrolledStudents
+                    : enrolledStudents.filter(s => enrollmentSections[s.id] === sectionFilter);
+                  return filtered.length === 0 ? (
+                    <p className="text-gray-500 p-6 text-center">{t('class.no_students')}</p>
+                  ) : (
+                    filtered.map((s: any, idx: number) => (
+                      <div key={s.id} className="flex items-center gap-4 p-3 bg-white hover:shadow-soft rounded-xl transition-smooth animate-fade-up border border-gray-100/50" style={{ animationDelay: `${idx * 30}ms` }}>
+                        <div className="w-9 h-9 rounded-lg bg-gradient-gold text-white flex items-center justify-center font-bold text-sm flex-shrink-0">
+                          {s.name?.charAt(0) || '?'}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <span className="font-bold text-sm text-gray-900 block truncate">{s.name}</span>
+                          <p className="text-xs text-gray-400 truncate">{s.email}</p>
+                        </div>
+                        {enrollmentSections[s.id] && (
+                          <span className="text-[10px] font-bold px-2.5 py-1 rounded-full bg-blue-50 text-blue-700 flex-shrink-0">
+                            {enrollmentSections[s.id]}
+                          </span>
+                        )}
                       </div>
-                      <div className="min-w-0">
-                        <span className="font-bold text-sm text-gray-900 block truncate">{s.name}</span>
-                        <p className="text-xs text-gray-400 truncate">{s.email}</p>
-                      </div>
-                    </div>
-                  ))
-                )}
+                    ))
+                  );
+                })()}
               </div>
+            </div>
             </div>
           </div>
         )}
@@ -727,63 +799,80 @@ export const Classroom = () => {
           </div>
         </div>
       )}
-      {/* AI Lesson Plan Modal */}
-      {isAIModalOpen && (
+      
+      {/* AI Module Generator Modal */}
+      {isAIModuleModalOpen && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-2xl w-full max-w-2xl overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200">
-            <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-gradient-to-r from-silid-teal to-blue-700 text-white">
+          <div className="bg-white rounded-2xl w-full max-w-2xl overflow-hidden shadow-2xl animate-fade-up">
+            <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-gradient-to-r from-purple-600 to-indigo-600 text-white">
               <div className="flex items-center gap-2">
-                <Sparkles size={24} />
-                <h3 className="text-xl font-bold">AI Lesson Plan Generator</h3>
+                <Wand2 size={24} />
+                <h3 className="text-xl font-bold">AI Module Generator</h3>
               </div>
-              <button onClick={() => { setIsAIModalOpen(false); setGeneratedPlan(''); }} className="p-2 hover:bg-white/10 rounded-full">
+              <button onClick={() => { setIsAIModuleModalOpen(false); setGeneratedModule(null); }} className="p-2 hover:bg-white/10 rounded-full transition-smooth">
                 <X size={20} />
               </button>
             </div>
             
             <div className="p-6">
-              {!generatedPlan ? (
-                <form onSubmit={handleGenerateAIPlan} className="space-y-4">
-                  <p className="text-gray-600 text-sm">Gamitin ang kapangyarihan ng AI para mabilis na makagawa ng lesson plan.</p>
+              {!generatedModule ? (
+                <form onSubmit={async (e) => {
+                  e.preventDefault();
+                  setIsGeneratingModule(true);
+                  try {
+                    const result = await generateModuleContent(aiModuleTopic, `${aiModuleSubject} - ${aiModuleGrade}`);
+                    setGeneratedModule(result);
+                  } catch (err) {
+                    console.error('AI module error:', err);
+                  } finally {
+                    setIsGeneratingModule(false);
+                  }
+                }} className="space-y-4">
+                  <p className="text-gray-600 text-sm">Gumawa ng educational module gamit ang AI. I-type lang ang topic at gagawan ka ng content na pwedeng basahin ng mga estudyante.</p>
                   <div className="grid grid-cols-2 gap-4">
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Subject</label>
+                      <label className="block text-sm font-bold text-gray-700 mb-1">Subject</label>
                       <input 
                         required
-                        value={aiSubject}
-                        onChange={e => setAiSubject(e.target.value)}
+                        value={aiModuleSubject}
+                        onChange={e => setAiModuleSubject(e.target.value)}
                         placeholder="e.g. Science, Math" 
-                        className="w-full px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-silid-teal/20 outline-none"
+                        className="w-full px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 outline-none transition-smooth"
                       />
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Grade Level</label>
+                      <label className="block text-sm font-bold text-gray-700 mb-1">Grade Level</label>
                       <input 
                         required
-                        value={aiGrade}
-                        onChange={e => setAiGrade(e.target.value)}
+                        value={aiModuleGrade}
+                        onChange={e => setAiModuleGrade(e.target.value)}
                         placeholder="e.g. Grade 7" 
-                        className="w-full px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-silid-teal/20 outline-none"
+                        className="w-full px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 outline-none transition-smooth"
                       />
                     </div>
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Topic / Paksa</label>
+                    <label className="block text-sm font-bold text-gray-700 mb-1">Topic / Paksa</label>
                     <input 
                       required
-                      value={aiTopic}
-                      onChange={e => setAiTopic(e.target.value)}
-                      placeholder="Anong paksa ang ituturo mo?" 
-                      className="w-full px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-silid-teal/20 outline-none"
+                      value={aiModuleTopic}
+                      onChange={e => setAiModuleTopic(e.target.value)}
+                      placeholder="Anong topic ang gusto mong gawing module?" 
+                      className="w-full px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 outline-none transition-smooth"
                     />
                   </div>
                   <div className="pt-4">
                     <button 
                       type="submit"
-                      disabled={isSubmitting}
-                      className="w-full bg-silid-teal text-white py-3 rounded-xl font-bold hover:bg-blue-800 disabled:opacity-50 transition-all shadow-lg shadow-blue-200"
+                      disabled={isGeneratingModule}
+                      className="w-full bg-gradient-to-r from-purple-600 to-indigo-600 text-white py-3 rounded-xl font-bold hover:scale-[1.02] disabled:opacity-50 transition-smooth shadow-lg shadow-purple-200 btn-press"
                     >
-                      {isSubmitting ? 'Nag-ge-generate...' : 'I-generate na! ✨'}
+                      {isGeneratingModule ? (
+                        <span className="flex items-center justify-center gap-2">
+                          <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></span>
+                          Nag-ge-generate ng module...
+                        </span>
+                      ) : 'I-generate ang Module ✨'}
                     </button>
                   </div>
                 </form>
@@ -791,25 +880,55 @@ export const Classroom = () => {
                 <div className="space-y-4">
                   <div className="bg-gray-50 p-6 rounded-xl border border-gray-200 max-h-[400px] overflow-y-auto">
                     <div className="prose prose-sm max-w-none">
-                      <pre className="whitespace-pre-wrap font-sans text-gray-800">{generatedPlan}</pre>
+                      <pre className="whitespace-pre-wrap font-sans text-gray-800">{generatedModule.content}</pre>
                     </div>
                   </div>
                   <div className="flex gap-3">
                     <button 
-                      onClick={() => {
-                        setNewTitle(`Lesson Plan: ${aiTopic}`);
-                        setNewContent(generatedPlan);
-                        setNewType('module');
-                        setIsAIModalOpen(false);
-                        setIsModalOpen(true);
+                      onClick={async () => {
+                        if (!user || !id) return;
+                        setIsSubmitting(true);
+                        try {
+                          const { error } = await supabase.from('assignments').insert([{
+                            classroomId: Number(id),
+                            createdBy: user.dbId,
+                            title: generatedModule.title,
+                            description: `AI-generated module about ${aiModuleTopic}`,
+                            type: 'module',
+                            points: 0,
+                            content: generatedModule.content,
+                          }]);
+                          if (error) throw error;
+
+                          // Refresh classwork list
+                          const { data: refreshed } = await supabase
+                            .from('assignments')
+                            .select('*')
+                            .eq('classroomId', Number(id))
+                            .order('createdAt', { ascending: false });
+                          if (refreshed) setClassworks(refreshed);
+
+                          setIsAIModuleModalOpen(false);
+                          setGeneratedModule(null);
+                          setAiModuleTopic('');
+                          setAiModuleSubject('');
+                          setAiModuleGrade('');
+                        } catch (err) {
+                          console.error('Error saving module:', err);
+                          alert('Error saving module. Please try again.');
+                        } finally {
+                          setIsSubmitting(false);
+                        }
                       }}
-                      className="flex-1 bg-silid-teal text-white py-3 rounded-xl font-bold hover:bg-blue-800"
+                      disabled={isSubmitting}
+                      className="flex-1 bg-gradient-to-r from-purple-600 to-indigo-600 text-white py-3 rounded-xl font-bold hover:scale-[1.02] transition-smooth shadow-lg shadow-purple-200 btn-press disabled:opacity-50 flex items-center justify-center gap-2"
                     >
-                      I-save bilang Module
+                      <BookOpen size={18} />
+                      {isSubmitting ? 'Sine-save...' : 'I-save bilang Module'}
                     </button>
                     <button 
-                      onClick={() => setGeneratedPlan('')}
-                      className="px-6 py-3 border border-gray-200 rounded-xl font-bold hover:bg-gray-50"
+                      onClick={() => setGeneratedModule(null)}
+                      className="px-6 py-3 border border-gray-200 rounded-xl font-bold hover:bg-gray-50 transition-smooth btn-press"
                     >
                       Ulitin
                     </button>
@@ -820,7 +939,7 @@ export const Classroom = () => {
           </div>
         </div>
       )}
-      
+
       {/* CSV Import Modal */}
       {isImportModalOpen && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4 z-50">

@@ -40,37 +40,90 @@ export async function generateLessonPlan(topic: string, gradeLevel?: string): Pr
   try {
     const prompt = `${SYSTEM_CONTEXT}\n\nGenerate a detailed lesson plan for the topic "${topic}"${gradeLevel ? ` for ${gradeLevel}` : ''}.
     
-Format it with these sections:
-## Lesson Plan: ${topic}
+DO NOT use markdown formatting (like ## or **). Use ALL CAPS for section headers.
 
-### Learning Objectives
+Format it with these sections:
+LESSON PLAN: ${topic}
+
+LEARNING OBJECTIVES
 (3-4 specific, measurable objectives)
 
-### Materials Needed
+MATERIALS NEEDED
 (List of materials)
 
-### Motivation / Ice Breaker (5 minutes)
+MOTIVATION / ICE BREAKER (5 minutes)
 (An engaging opening activity)
 
-### Discussion / Input (15 minutes)
+DISCUSSION / INPUT (15 minutes)
 (Key concepts to cover with examples)
 
-### Activity (15 minutes)
+ACTIVITY (15 minutes)
 (A hands-on activity for students)
 
-### Evaluation (10 minutes)
+EVALUATION (10 minutes)
 (Assessment questions or tasks)
 
-### Assignment
+ASSIGNMENT
 (Take-home work)
 
 Make it practical, engaging, and aligned to Philippine K-12 curriculum standards where applicable.`;
 
     const result = await geminiModel.generateContent(prompt);
     const response = await result.response;
-    return response.text();
+    let text = response.text();
+    // Strip markdown characters like #, *, _, `
+    text = text.replace(/[#*`_]/g, '').trim();
+    return text;
   } catch (error) {
     console.error("Lesson plan generation error:", error);
     return "Could not generate lesson plan. Please try again.";
+  }
+}
+
+export async function generateModuleContent(topic: string, gradeLevel?: string): Promise<{ title: string; content: string }> {
+  try {
+    const prompt = `${SYSTEM_CONTEXT}\n\nGenerate educational module content for the topic "${topic}"${gradeLevel ? ` for ${gradeLevel}` : ''}.
+
+DO NOT use markdown formatting (like ## or **). Use ALL CAPS for section headers.
+Write it as a comprehensive learning module that a student can read and learn from.
+
+Format it with these sections:
+
+INTRODUCTION
+(Brief overview of the topic and why it matters)
+
+KEY CONCEPTS
+(Detailed explanation of the main concepts with clear definitions)
+
+EXAMPLES
+(2-3 practical, real-world examples relevant to Filipino students)
+
+DID YOU KNOW?
+(An interesting fact related to the topic)
+
+SUMMARY
+(A concise recap of the key points)
+
+REVIEW QUESTIONS
+(3-5 questions to check understanding — no answer key needed)
+
+Make it educational, engaging, age-appropriate, and aligned to Philippine K-12 curriculum standards where applicable.`;
+
+    const result = await geminiModel.generateContent(prompt);
+    const response = await result.response;
+    let text = response.text();
+    // Strip markdown characters
+    text = text.replace(/[#*`_]/g, '').trim();
+
+    return {
+      title: `${topic}`,
+      content: text,
+    };
+  } catch (error) {
+    console.error("Module content generation error:", error);
+    return {
+      title: topic,
+      content: "Could not generate module content. Please try again.",
+    };
   }
 }
