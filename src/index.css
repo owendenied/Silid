@@ -1,0 +1,23 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: 'Noto Sans', system-ui, sans-serif;
+  
+  --color-silid-teal: #1B6CA8;
+  --color-silid-yellow: #F5A623;
+  --color-silid-green: #2ecc71;
+  --color-silid-gray: #f9fafb;
+}
+
+@layer base {
+  :root {
+    --background: #ffffff;
+    --foreground: #333333;
+  }
+  
+  body {
+    background-color: var(--background);
+    color: var(--foreground);
+    font-family: 'Noto Sans', system-ui, sans-serif;
+  }
+}
