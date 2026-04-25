@@ -4,12 +4,14 @@ import { supabase } from '../lib/supabase';
 
 interface AppState {
   user: {
-    id: string;
+    id: string; // This is the Supabase UUID (mapped to openId in DB)
+    dbId: number; // This is the integer ID from users table
     role: 'student' | 'teacher';
     name: string;
     email: string;
     xp?: number;
   } | null;
+
   isOffline: boolean;
   isInitializing: boolean;
   setUser: (user: AppState['user']) => void;
@@ -57,13 +59,14 @@ supabase.auth.onAuthStateChange(async (event, session) => {
     const { data: userData } = await supabase
       .from('users')
       .select('*')
-      .eq('id', session.user.id)
+      .eq('openId', session.user.id)
       .single();
 
     if (userData) {
       useAppStore.getState().setUser({
         id: session.user.id,
-        role: userData.role || (userData.level === 'Guro' ? 'teacher' : 'student'),
+        dbId: userData.id,
+        role: userData.appRole || 'student',
         name: userData.name || session.user.user_metadata?.full_name || 'User',
         email: session.user.email || '',
         xp: userData.xp || 0
@@ -72,6 +75,7 @@ supabase.auth.onAuthStateChange(async (event, session) => {
       // If user profile doesn't exist in 'users' table yet
       useAppStore.getState().setUser({
         id: session.user.id,
+        dbId: 0, // Temporary until profile is created
         role: session.user.user_metadata?.role || 'student',
         name: session.user.user_metadata?.full_name || 'User',
         email: session.user.email || '',
@@ -83,6 +87,7 @@ supabase.auth.onAuthStateChange(async (event, session) => {
   }
   useAppStore.getState().setInitializing(false);
 });
+
 
 // Safety timeout: Ensure initialization always completes
 setTimeout(() => {

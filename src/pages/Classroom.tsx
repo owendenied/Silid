@@ -5,22 +5,23 @@ import { Download,FileText, Plus,MessageSquare, X, BookOpen, Sparkles, Megaphone
 import { supabase } from '../lib/supabase';
 
 interface Classwork {
-  id: string;
+  id: number;
   title: string;
   description: string;
-  type: 'module' | 'quiz';
+  type: 'module' | 'quiz' | 'assignment';
   points: number;
-  attachmentUrl?: string;
-  attachmentName?: string;
-  createdAt: any;
+  pdfUrl?: string;
+  youtubeUrl?: string;
+  createdAt: string;
 }
 
 interface Announcement {
-  id: string;
-  authorName: string;
+  id: number;
+  authorId: number;
   content: string;
-  createdAt: any;
+  createdAt: string;
 }
+
 
 export const Classroom = () => {
   const { id } = useParams<{ id: string }>();
@@ -70,7 +71,7 @@ export const Classroom = () => {
     // Fetch classwork
     const fetchClasswork = async () => {
       const { data } = await supabase
-        .from('classwork')
+        .from('assignments')
         .select('*')
         .eq('classroomId', id)
         .order('createdAt', { ascending: false });
@@ -84,7 +85,7 @@ export const Classroom = () => {
     // Fetch announcements
     const fetchAnnouncements = async () => {
       const { data } = await supabase
-        .from('announcements')
+        .from('posts')
         .select('*')
         .eq('classroomId', id)
         .order('createdAt', { ascending: false });
@@ -93,16 +94,18 @@ export const Classroom = () => {
         setAnnouncements(data);
       }
     };
+
     fetchAnnouncements();
 
     // Set up realtime subscriptions
-    const classworkChannel = supabase.channel(`classwork-${id}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'classwork', filter: `classroomId=eq.${id}` }, () => fetchClasswork())
+    const classworkChannel = supabase.channel(`assignments-${id}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'assignments', filter: `classroomId=eq.${id}` }, () => fetchClasswork())
       .subscribe();
 
-    const announcementsChannel = supabase.channel(`announcements-${id}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'announcements', filter: `classroomId=eq.${id}` }, () => fetchAnnouncements())
+    const announcementsChannel = supabase.channel(`posts-${id}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'posts', filter: `classroomId=eq.${id}` }, () => fetchAnnouncements())
       .subscribe();
+
 
     return () => {
       supabase.removeChannel(classworkChannel);
@@ -112,7 +115,8 @@ export const Classroom = () => {
 
   const handleCreateClasswork = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!user || user.id !== classroom?.teacherId || !id) return;
+    if (!user || user.dbId !== classroom?.teacherId || !id) return;
+
     setIsSubmitting(true);
 
     try {
@@ -162,8 +166,9 @@ export const Classroom = () => {
       }
 
       const { error } = await supabase
-        .from('classwork')
+        .from('assignments')
         .insert([classworkData]);
+
 
       if (error) throw error;
 
@@ -187,13 +192,13 @@ export const Classroom = () => {
 
     try {
       const { error } = await supabase
-        .from('announcements')
+        .from('posts')
         .insert([{
           classroomId: id,
-          authorId: user.id,
-          authorName: user.name,
+          authorId: user.dbId,
           content: announcementContent,
         }]);
+
 
       if (error) throw error;
 
@@ -253,11 +258,12 @@ Maikling pagsusulit na binubuo ng 5-10 na tanong.
           <h1 className="text-4xl font-bold mb-2">{classroom.name}</h1>
           <p className="text-lg text-white/90">{classroom.section}</p>
         </div>
-        {user?.id === classroom.teacherId && (
+        {user?.dbId === classroom.teacherId && (
           <div className="absolute top-4 right-4 bg-black/20 px-4 py-2 rounded-lg text-sm font-mono backdrop-blur-sm">
-            Class Code: <span className="font-bold text-white ml-2 text-lg">{classroom.inviteCode}</span>
+            Class Code: <span className="font-bold text-white ml-2 text-lg">{classroom.joinCode}</span>
           </div>
         )}
+
       </div>
 
       {/* Tabs */}
@@ -295,7 +301,8 @@ Maikling pagsusulit na binubuo ng 5-10 na tanong.
               </div>
             </div>
             <div className="lg:col-span-3 space-y-4">
-              {user?.id === classroom?.teacherId && (
+              {user?.dbId === classroom?.teacherId && (
+
                 <div className="flex gap-2">
                   <div 
                     onClick={() => setIsAnnouncementModalOpen(true)}
@@ -329,7 +336,8 @@ Maikling pagsusulit na binubuo ng 5-10 na tanong.
                     </div>
                     <div className="flex-1">
                       <div className="flex items-center gap-2 mb-1">
-                        <span className="font-bold text-gray-900">{item.authorName}</span>
+                        <span className="font-bold text-gray-900">Guro</span>
+
                         <span className="text-sm text-gray-500">• {new Date(item.createdAt).toLocaleDateString()}</span>
                       </div>
                       <p className="text-gray-800 whitespace-pre-wrap">{item.content}</p>
@@ -343,7 +351,8 @@ Maikling pagsusulit na binubuo ng 5-10 na tanong.
 
         {activeTab === 'classwork' && (
           <div className="space-y-6">
-            {user?.id === classroom?.teacherId && (
+            {user?.dbId === classroom?.teacherId && (
+
               <div className="flex gap-4">
                 <button 
                   onClick={() => setIsModalOpen(true)}
@@ -398,7 +407,8 @@ Maikling pagsusulit na binubuo ng 5-10 na tanong.
                 <h2 className="text-2xl font-bold text-silid-teal">Mga Mag-aaral</h2>
                 <div className="flex items-center gap-4">
                   <span className="font-bold text-gray-500">{classroom.students?.length || 0} mag-aaral</span>
-                  {user?.id === classroom.teacherId && (
+                  {user?.dbId === classroom.teacherId && (
+
                     <button 
                       onClick={() => setIsImportModalOpen(true)}
                       className="flex items-center gap-2 text-silid-teal hover:bg-blue-50 px-3 py-1.5 rounded-lg border border-silid-teal transition-all text-sm font-bold"

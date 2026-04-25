@@ -12,6 +12,8 @@ export const Login = () => {
   const [isRegistering, setIsRegistering] = useState(false);
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [successMessage, setSuccessMessage] = useState('');
+
   const navigate = useNavigate();
 
   React.useEffect(() => {
@@ -41,33 +43,27 @@ export const Login = () => {
         if (authError) throw authError;
         if (!authData.user) throw new Error('Failed to create user');
 
-        const profileData = {
-          id: authData.user.id,
-          name,
-          email,
-          role,
-          xp: 0,
-          level: role === 'teacher' ? 'Guro' : 'Mag-aaral'
-        };
-
-        const newUser = {
-          id: authData.user.id,
-          role,
-          name,
-          email,
-          xp: 0
-        };
-        
-        // Optimistic update of store
-        setUser(newUser);
-        
         // Ensure profile is created in 'users' table
         const { error: profileError } = await supabase
           .from('users')
-          .insert([profileData]);
+          .insert([{
+            openId: authData.user.id,
+            name,
+            email,
+            appRole: role,
+            xp: 0,
+            level: 1
+          }]);
           
-        if (profileError) console.error("Error creating profile:", profileError);
-        
+        if (profileError) {
+          console.error("Error creating profile:", profileError);
+          // If it fails because profile exists, it's fine, but if it's a schema error we want to know
+        }
+
+        setSuccessMessage('Matagumpay ang iyong pag-signup! Mangyaring i-check ang iyong email para sa confirmation link bago mag-login.');
+        setIsRegistering(false);
+        setIsLoading(false);
+        return;
       } else {
         useAppStore.getState().setInitializing(true);
         
@@ -76,9 +72,15 @@ export const Login = () => {
           password
         });
 
-        if (signInError) throw signInError;
+        if (signInError) {
+          if (signInError.message.includes('Email not confirmed')) {
+            throw new Error('Hindi pa kumpirmado ang iyong email. Pakitingnan ang iyong inbox.');
+          }
+          throw signInError;
+        }
       }
       navigate('/dashboard');
+
     } catch (err: unknown) {
       console.error(err);
       setError(err instanceof Error ? err.message : 'May naganap na error.');
@@ -104,6 +106,13 @@ export const Login = () => {
                 <p className="text-sm text-red-700">{error}</p>
               </div>
             )}
+
+            {successMessage && (
+              <div className="bg-green-50 border-l-4 border-green-400 p-4">
+                <p className="text-sm text-green-700">{successMessage}</p>
+              </div>
+            )}
+
             
             {isRegistering && (
               <>

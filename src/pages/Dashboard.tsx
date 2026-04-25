@@ -5,14 +5,15 @@ import { useAppStore } from '../store/useAppStore';
 import { supabase } from '../lib/supabase';
 
 interface ClassroomData {
-  id: string;
+  id: number;
   name: string;
   section: string;
-  teacherId: string;
-  inviteCode: string;
-  students: string[];
+  teacherId: number;
+  joinCode: string;
+  students: number[];
   image: string;
 }
+
 
 const GRADIENTS = [
   'bg-gradient-to-r from-blue-500 to-[var(--color-silid-teal)]',
@@ -34,10 +35,12 @@ export const Dashboard = () => {
     if (!user) return;
 
     const fetchClasses = async () => {
+      if (!user.dbId) return;
       const { data, error } = await supabase
         .from('classrooms')
         .select('*')
-        .or(`teacherId.eq.${user.id},students.cs.{${user.id}}`);
+        .or(`teacherId.eq.${user.dbId},students.cs.{${user.dbId}}`);
+
 
       if (error) {
         console.error("Error fetching classes:", error);
@@ -71,7 +74,8 @@ export const Dashboard = () => {
     setIsSubmitting(true);
 
     try {
-      const inviteCode = Math.random().toString(36).substring(2, 8).toUpperCase().padEnd(6, 'X');
+      const joinCode = Math.random().toString(36).substring(2, 8).toUpperCase().padEnd(6, 'X');
+
       const randomGradient = GRADIENTS[Math.floor(Math.random() * GRADIENTS.length)];
 
       const { error } = await supabase
@@ -79,11 +83,12 @@ export const Dashboard = () => {
         .insert([{
           name: newClassName,
           section: newSection,
-          teacherId: user.id,
-          inviteCode,
+          teacherId: user.dbId,
+          joinCode,
           students: [],
           image: randomGradient
         }]);
+
 
       if (error) throw error;
 
@@ -109,8 +114,9 @@ export const Dashboard = () => {
       const { data: classroom, error: fetchError } = await supabase
         .from('classrooms')
         .select('*')
-        .eq('inviteCode', trimmedCode)
+        .eq('joinCode', trimmedCode)
         .single();
+
 
       if (fetchError || !classroom) {
         alert("Hindi mahanap ang klase. Siguraduhing tama ang code.");
@@ -118,7 +124,7 @@ export const Dashboard = () => {
         return;
       }
 
-      if (classroom.students?.includes(user.id)) {
+      if (classroom.students?.includes(user.dbId)) {
         alert("Nakasali ka na sa klaseng ito.");
         setIsModalOpen(false);
         setJoinCode('');
@@ -126,7 +132,8 @@ export const Dashboard = () => {
         return;
       }
 
-      const updatedStudents = [...(classroom.students || []), user.id];
+      const updatedStudents = [...(classroom.students || []), user.dbId];
+
 
       const { error: updateError } = await supabase
         .from('classrooms')

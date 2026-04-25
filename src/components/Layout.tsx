@@ -23,7 +23,8 @@ export const Layout = () => {
     
     // Listen to real-time user updates (XP/Badges)
     const profileChannel = supabase.channel(`layout-profile-${user.id}`)
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'users', filter: `id=eq.${user.id}` }, (payload) => {
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'users', filter: `openId=eq.${user.id}` }, (payload) => {
+
         setLiveXp(payload.new.xp || 0);
         if (payload.new.xp !== user.xp) {
           setUser({ ...user, xp: payload.new.xp });
@@ -38,10 +39,11 @@ export const Layout = () => {
 
   const levelInfo = getLevelInfo(liveXp);
 
-  const handleLogout = () => {
-    logout();
-    navigate('/');
+  const handleLogout = async () => {
+    await logout();
+    navigate('/login');
   };
+
 
   if (isInitializing) {
     return (
