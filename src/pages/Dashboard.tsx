@@ -58,7 +58,7 @@ export const Dashboard = () => {
 
     try {
       // Generate a random 6 char invite code
-      const inviteCode = Math.random().toString(36).substring(2, 8).toUpperCase();
+      const inviteCode = Math.random().toString(36).substring(2, 8).toUpperCase().padEnd(6, 'X');
       const randomGradient = GRADIENTS[Math.floor(Math.random() * GRADIENTS.length)];
 
       await addDoc(collection(db, 'classrooms'), {
@@ -88,7 +88,14 @@ export const Dashboard = () => {
     setIsSubmitting(true);
 
     try {
-      const q = query(collection(db, 'classrooms'), where('inviteCode', '==', joinCode.toUpperCase()));
+      const trimmedCode = joinCode.trim().toUpperCase();
+      console.log("Searching for class with code:", trimmedCode);
+      
+      const q = query(
+        collection(db, 'classrooms'), 
+        where('inviteCode', '==', trimmedCode)
+      );
+      
       const querySnapshot = await getDocs(q);
 
       if (querySnapshot.empty) {
@@ -99,6 +106,16 @@ export const Dashboard = () => {
 
       const classDoc = querySnapshot.docs[0];
       const classRef = doc(db, 'classrooms', classDoc.id);
+      const classData = classDoc.data();
+
+      // Check if already in class
+      if (classData.students?.includes(user.id)) {
+        alert("Nakasali ka na sa klaseng ito.");
+        setIsModalOpen(false);
+        setJoinCode('');
+        setIsSubmitting(false);
+        return;
+      }
 
       await updateDoc(classRef, {
         students: arrayUnion(user.id)
@@ -106,6 +123,7 @@ export const Dashboard = () => {
 
       setIsModalOpen(false);
       setJoinCode('');
+      alert("Matagumpay na nakasali sa klase!");
     } catch (error) {
       console.error("Error joining class:", error);
       alert("May error sa pagsali sa klase.");

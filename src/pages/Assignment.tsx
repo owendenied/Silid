@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAppStore } from '../store/useAppStore';
-import { ArrowLeft, CheckCircle, FileText, AlertCircle } from 'lucide-react';
+import { ArrowLeft, CheckCircle, FileText, AlertCircle, Paperclip } from 'lucide-react';
 import { db } from '../lib/firebase';
 import { doc, getDoc, setDoc, serverTimestamp, updateDoc, increment } from 'firebase/firestore';
 
@@ -145,6 +145,29 @@ export const Assignment = () => {
         <div className="prose max-w-none mb-8 text-gray-700">
           <p>{classwork.description}</p>
         </div>
+
+        {/* Attachment View */}
+        {classwork.attachmentUrl && (
+          <div className="mb-8 p-4 bg-gray-50 rounded-xl border border-gray-200 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-white rounded-lg flex items-center justify-center shadow-sm text-[var(--color-silid-teal)]">
+                <Paperclip size={20} />
+              </div>
+              <div>
+                <p className="text-sm font-bold text-gray-900">{classwork.attachmentName || 'Attachment'}</p>
+                <p className="text-xs text-gray-500">I-download para makita ang file</p>
+              </div>
+            </div>
+            <a 
+              href={classwork.attachmentUrl} 
+              target="_blank" 
+              rel="noopener noreferrer"
+              className="px-4 py-2 bg-white border border-gray-200 rounded-lg text-sm font-bold text-[var(--color-silid-teal)] hover:bg-gray-50 transition-colors shadow-sm"
+            >
+              I-download
+            </a>
+          </div>
+        )}
 
         {/* Module Content View */}
         {classwork.type === 'module' && (

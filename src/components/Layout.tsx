@@ -7,9 +7,15 @@ import { doc, onSnapshot } from 'firebase/firestore';
 import { getLevelInfo } from '../lib/levels';
 
 export const Layout = () => {
-  const { user, isOffline, logout, setUser } = useAppStore();
+  const { user, isOffline, isInitializing, logout, setUser } = useAppStore();
   const navigate = useNavigate();
   const [liveXp, setLiveXp] = useState(user?.xp || 0);
+
+  useEffect(() => {
+    if (!isInitializing && !user) {
+      navigate('/login');
+    }
+  }, [user, isInitializing, navigate]);
 
   useEffect(() => {
     if (!user?.id) return;
@@ -35,6 +41,17 @@ export const Layout = () => {
     logout();
     navigate('/');
   };
+
+  if (isInitializing) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="flex flex-col items-center gap-4">
+          <BookOpen className="text-[var(--color-silid-teal)] animate-pulse" size={48} />
+          <p className="text-gray-500 font-medium">Naglo-load ang Silid...</p>
+        </div>
+      </div>
+    );
+  }
 
   if (!user) {
     return null;

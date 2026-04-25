@@ -3,7 +3,10 @@ import { useParams, Link } from 'react-router-dom';
 import { useAppStore } from '../store/useAppStore';
 import { FileText, Plus, Users, Clock, CheckCircle, X, BookOpen, MessageSquare } from 'lucide-react';
 import { db } from '../lib/firebase';
-import { doc, getDoc, collection, query, where, onSnapshot, addDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, getDoc, collection, query, where, onSnapshot, addDoc, serverTimestamp, orderBy } from 'firebase/firestore';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { storage } from '../lib/firebase';
+import { Paperclip, Megaphone, Send } from 'lucide-react';
 
 interface Classwork {
   id: string;
@@ -11,12 +14,17 @@ interface Classwork {
   description: string;
   type: 'module' | 'quiz';
   points: number;
+  attachmentUrl?: string;
+  attachmentName?: string;
   createdAt: any;
 }
 
-const MOCK_STREAM = [
-  { id: '1', author: 'Guro', time: '10:00 AM', content: 'Magandang umaga class! Pakibasa ang Module 1 bago mag-Friday.', type: 'announcement' },
-];
+interface Announcement {
+  id: string;
+  authorName: string;
+  content: string;
+  createdAt: any;
+}
 
 export const Classroom = () => {
   const { id } = useParams<{ id: string }>();
@@ -25,13 +33,17 @@ export const Classroom = () => {
   
   const [classroom, setClassroom] = useState<any>(null);
   const [classworks, setClassworks] = useState<Classwork[]>([]);
+  const [announcements, setAnnouncements] = useState<Announcement[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isAnnouncementModalOpen, setIsAnnouncementModalOpen] = useState(false);
   
   // Form state
   const [newType, setNewType] = useState<'module' | 'quiz'>('module');
   const [newTitle, setNewTitle] = useState('');
   const [newDesc, setNewDesc] = useState('');
   const [newContent, setNewContent] = useState('');
+  const [newFile, setNewFile] = useState<File | null>(null);
+  const [announcementContent, setAnnouncementContent] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
@@ -48,17 +60,33 @@ export const Classroom = () => {
 
     // Listen to classwork
     const q = query(collection(db, 'classwork'), where('classroomId', '==', id));
-    const unsubscribe = onSnapshot(q, (snapshot) => {
+    const unsubClasswork = onSnapshot(q, (snapshot) => {
       const cwData: Classwork[] = [];
       snapshot.forEach(doc => {
         cwData.push({ id: doc.id, ...doc.data() } as Classwork);
       });
-      // Sort by creation time manually
       cwData.sort((a, b) => (b.createdAt?.toMillis() || 0) - (a.createdAt?.toMillis() || 0));
       setClassworks(cwData);
     });
 
-    return () => unsubscribe();
+    // Listen to announcements
+    const qAnnouncements = query(
+      collection(db, 'announcements'), 
+      where('classroomId', '==', id),
+      orderBy('createdAt', 'desc')
+    );
+    const unsubAnnouncements = onSnapshot(qAnnouncements, (snapshot) => {
+      const announceData: Announcement[] = [];
+      snapshot.forEach(doc => {
+        announceData.push({ id: doc.id, ...doc.data() } as Announcement);
+      });
+      setAnnouncements(announceData);
+    });
+
+    return () => {
+      unsubClasswork();
+      unsubAnnouncements();
+    };
   }, [id]);
 
   const handleCreateClasswork = async (e: React.FormEvent) => {
@@ -67,12 +95,24 @@ export const Classroom = () => {
     setIsSubmitting(true);
 
     try {
+      let attachmentUrl = '';
+      let attachmentName = '';
+
+      if (newFile) {
+        const fileRef = ref(storage, `classwork_attachments/${Date.now()}_${newFile.name}`);
+        const uploadResult = await uploadBytes(fileRef, newFile);
+        attachmentUrl = await getDownloadURL(uploadResult.ref);
+        attachmentName = newFile.name;
+      }
+
       const classworkData: any = {
         classroomId: id,
         title: newTitle,
         description: newDesc,
         type: newType,
         points: newType === 'quiz' ? 10 : 0,
+        attachmentUrl,
+        attachmentName,
         createdAt: serverTimestamp()
       };
 
@@ -94,9 +134,33 @@ export const Classroom = () => {
       setNewTitle('');
       setNewDesc('');
       setNewContent('');
+      setNewFile(null);
     } catch (error) {
       console.error(error);
       alert('May error sa paggawa ng gawain.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handlePostAnnouncement = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!user || !id || !announcementContent.trim()) return;
+    setIsSubmitting(true);
+
+    try {
+      await addDoc(collection(db, 'announcements'), {
+        classroomId: id,
+        authorId: user.id,
+        authorName: user.name,
+        content: announcementContent,
+        createdAt: serverTimestamp()
+      });
+      setAnnouncementContent('');
+      setIsAnnouncementModalOpen(false);
+    } catch (error) {
+      console.error("Error posting announcement:", error);
+      alert("May error sa pag-post ng anunsyo.");
     } finally {
       setIsSubmitting(false);
     }
@@ -160,25 +224,38 @@ export const Classroom = () => {
             </div>
             <div className="lg:col-span-3 space-y-4">
               {user?.role === 'teacher' && (
-                <div className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm flex items-center gap-4 cursor-pointer hover:bg-gray-50 transition-colors text-gray-500">
-                  <div className="w-10 h-10 rounded-full bg-[var(--color-silid-teal)] flex items-center justify-center text-white font-bold">G</div>
+                <div 
+                  onClick={() => setIsAnnouncementModalOpen(true)}
+                  className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm flex items-center gap-4 cursor-pointer hover:bg-gray-50 transition-colors text-gray-500"
+                >
+                  <div className="w-10 h-10 rounded-full bg-[var(--color-silid-teal)] flex items-center justify-center text-white font-bold">
+                    {user.name.charAt(0)}
+                  </div>
                   <p>Mag-post ng anunsyo sa iyong klase...</p>
                 </div>
               )}
-              {MOCK_STREAM.map((item) => (
-                <div key={item.id} className="bg-white rounded-xl p-6 shadow-sm border border-gray-200 flex gap-4">
-                  <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center text-blue-600 flex-shrink-0">
-                    {item.type === 'announcement' ? <MessageSquare size={24} /> : <FileText size={24} />}
-                  </div>
-                  <div>
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="font-bold text-gray-900">{item.author}</span>
-                      <span className="text-sm text-gray-500">• {item.time}</span>
-                    </div>
-                    <p className="text-gray-800">{item.content}</p>
-                  </div>
+              
+              {announcements.length === 0 ? (
+                <div className="bg-white border border-dashed border-gray-200 rounded-xl p-12 text-center text-gray-400">
+                  <Megaphone className="mx-auto mb-2 opacity-20" size={48} />
+                  <p>Wala pang anunsyo sa klaseng ito.</p>
                 </div>
-              ))}
+              ) : (
+                announcements.map((item) => (
+                  <div key={item.id} className="bg-white rounded-xl p-6 shadow-sm border border-gray-200 flex gap-4 animate-in fade-in slide-in-from-top-2 duration-300">
+                    <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center text-[var(--color-silid-teal)] flex-shrink-0">
+                      <MessageSquare size={24} />
+                    </div>
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="font-bold text-gray-900">{item.authorName}</span>
+                        <span className="text-sm text-gray-500">• {item.createdAt?.toDate().toLocaleDateString()}</span>
+                      </div>
+                      <p className="text-gray-800 whitespace-pre-wrap">{item.content}</p>
+                    </div>
+                  </div>
+                ))
+              )}
             </div>
           </div>
         )}
@@ -320,7 +397,7 @@ export const Classroom = () => {
                   <p className="text-sm text-blue-800 mb-2 font-medium">Demo Quiz Mode</p>
                   <p className="text-xs text-blue-600 mb-3">Para sa prototype, ilagay ang iyong tanong sa ibaba. Ang sagot ay awtomatikong magiging "Jose Rizal".</p>
                   <input 
-                    required
+                    required={newType === 'quiz'}
                     value={newContent}
                     onChange={e => setNewContent(e.target.value)}
                     type="text" 
@@ -329,6 +406,18 @@ export const Classroom = () => {
                   />
                 </div>
               )}
+
+              <div className="border-t border-gray-100 pt-4">
+                <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center gap-2">
+                  <Paperclip size={16} />
+                  Attachment (Optional)
+                </label>
+                <input 
+                  type="file" 
+                  onChange={e => setNewFile(e.target.files ? e.target.files[0] : null)}
+                  className="w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-[var(--color-silid-teal)] hover:file:bg-blue-100 transition-all"
+                />
+              </div>
 
               <div className="pt-4 flex gap-3 justify-end">
                 <button 
@@ -344,6 +433,50 @@ export const Classroom = () => {
                   className="px-4 py-2 bg-[var(--color-silid-teal)] text-white font-medium rounded-md hover:bg-blue-800 disabled:opacity-50"
                 >
                   {isSubmitting ? 'Nagse-save...' : 'I-post'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+      {/* Announcement Modal */}
+      {isAnnouncementModalOpen && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden animate-in zoom-in-95 duration-200">
+            <div className="flex justify-between items-center p-6 border-b border-gray-50">
+              <h2 className="text-xl font-bold text-gray-900 flex items-center gap-2">
+                <Megaphone className="text-[var(--color-silid-teal)]" />
+                Mag-post ng Anunsyo
+              </h2>
+              <button onClick={() => setIsAnnouncementModalOpen(false)} className="text-gray-400 hover:text-gray-600">
+                <X size={24} />
+              </button>
+            </div>
+            <form onSubmit={handlePostAnnouncement} className="p-6 space-y-4">
+              <textarea 
+                required
+                autoFocus
+                value={announcementContent}
+                onChange={e => setAnnouncementContent(e.target.value)}
+                placeholder="Ano ang gusto mong sabihin sa iyong mga mag-aaral?"
+                className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[var(--color-silid-teal)]/20 focus:border-[var(--color-silid-teal)] outline-none min-h-[150px] resize-none text-gray-800"
+              />
+              <div className="flex justify-end gap-3 pt-2">
+                <button 
+                  type="button"
+                  onClick={() => setIsAnnouncementModalOpen(false)}
+                  className="px-6 py-2 text-gray-500 font-medium hover:bg-gray-100 rounded-xl transition-colors"
+                >
+                  Kanselahin
+                </button>
+                <button 
+                  type="submit"
+                  disabled={isSubmitting || !announcementContent.trim()}
+                  className="px-8 py-2 bg-[var(--color-silid-teal)] text-white font-bold rounded-xl hover:bg-blue-800 disabled:opacity-50 transition-all flex items-center gap-2 shadow-lg shadow-blue-200"
+                >
+                  {isSubmitting ? 'Ipino-post...' : (
+                    <><Send size={18} /> I-post</>
+                  )}
                 </button>
               </div>
             </form>
