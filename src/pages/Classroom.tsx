@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useAppStore } from '../store/useAppStore';
-import { Download, FileText, Plus, X, BookOpen, Megaphone, Send, Paperclip, BarChart3, Wand2 } from 'lucide-react';
+import { Download, FileText, Plus, X, BookOpen, Megaphone, Send, Paperclip, BarChart3, Wand2, Archive } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useT } from '../lib/i18n';
 import { generateModuleContent } from '../lib/ai';
@@ -327,6 +327,14 @@ export const Classroom = () => {
 
       </div>
 
+      {/* Archived Banner */}
+      {classroom?.isArchived && (
+        <div className="bg-gray-100 dark:bg-gray-800 border-l-4 border-gray-500 text-gray-700 dark:text-gray-300 p-4 mb-6 rounded-r-xl flex items-center gap-3 shadow-sm animate-fade-up">
+          <Archive size={20} />
+          <p className="font-bold text-sm">This class is archived. Content is read-only.</p>
+        </div>
+      )}
+
       {/* Tabs */}
       <div className="border-b border-gray-200 overflow-x-auto">
         <nav className="-mb-px flex gap-1 md:gap-6 min-w-max">
@@ -363,7 +371,7 @@ export const Classroom = () => {
               </div>
             </div>
             <div className="lg:col-span-3 space-y-4">
-              {isTeacher && (
+              {isTeacher && !classroom?.isArchived && (
                 <div 
                   onClick={() => setIsAnnouncementModalOpen(true)}
                   className="bg-white border border-gray-100/50 rounded-2xl p-4 shadow-soft flex items-center gap-4 cursor-pointer hover:shadow-elevated transition-smooth text-gray-500 btn-press"
@@ -403,7 +411,7 @@ export const Classroom = () => {
 
         {activeTab === 'classwork' && (
           <div className="space-y-6">
-            {isTeacher && (
+            {isTeacher && !classroom?.isArchived && (
               <div className="flex gap-3">
                 <button 
                   onClick={() => { setNewType('quiz'); setIsModalOpen(true); }}
@@ -462,7 +470,7 @@ export const Classroom = () => {
 
         {activeTab === 'modules' && (
           <div className="space-y-6">
-            {isTeacher && (
+            {isTeacher && !classroom?.isArchived && (
               <div className="flex gap-3">
                 <button 
                   onClick={() => { setNewType('module'); setIsModalOpen(true); }}

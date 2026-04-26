@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { PlusCircle, Sparkles, MessageSquare, Users, BookOpen, Clock, X, CheckCircle2, GraduationCap, Download, FileText } from 'lucide-react';
+import { PlusCircle, Sparkles, MessageSquare, Users, BookOpen, Clock, X, CheckCircle2, GraduationCap, Download, FileText, Archive, ArchiveRestore } from 'lucide-react';
 import { useAppStore } from '../store/useAppStore';
 import { supabase } from '../lib/supabase';
 import { useT } from '../lib/i18n';
@@ -13,6 +13,7 @@ interface ClassroomData {
   section: string;
   teacherId: number;
   joinCode: string;
+  isArchived: boolean;
   _count?: { enrollments: number };
 }
 
@@ -38,6 +39,7 @@ export const Dashboard = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   const [stats, setStats] = useState({ totalStudents: 0, pendingGradings: 0, pendingAssignments: 0 });
+  const [activeTab, setActiveTab] = useState<'active' | 'archived'>('active');
 
   // AI Lesson Plan state
   const [isAIModalOpen, setIsAIModalOpen] = useState(false);
@@ -160,6 +162,18 @@ export const Dashboard = () => {
       setErrorMsg(error.message || 'Unknown error');
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const handleToggleArchive = async (e: React.MouseEvent, classId: number, currentStatus: boolean) => {
+    e.preventDefault(); // prevent navigation to class
+    try {
+      const { error } = await supabase.from('classrooms').update({ isArchived: !currentStatus }).eq('id', classId);
+      if (error) throw error;
+      setClasses(prev => prev.map(c => c.id === classId ? { ...c, isArchived: !currentStatus } : c));
+    } catch (error) {
+      console.error('Failed to toggle archive status:', error);
+      alert('Failed to update class archive status.');
     }
   };
 
@@ -339,8 +353,15 @@ export const Dashboard = () => {
 
       {/* Classes */}
       <div>
-        <h2 className="text-2xl font-extrabold font-display text-gray-900 mb-6">{t('dash.your_classes')}</h2>
-        {classes.length === 0 ? (
+        <div className="flex justify-between items-end mb-6">
+          <h2 className="text-2xl font-extrabold font-display text-gray-900">{t('dash.your_classes')}</h2>
+          <div className="flex gap-4 border-b border-gray-200">
+            <button onClick={() => setActiveTab('active')} className={`pb-2 font-bold text-sm transition-smooth ${activeTab === 'active' ? 'text-[var(--color-silid-coral)] border-b-2 border-[var(--color-silid-coral)]' : 'text-gray-400 hover:text-gray-600'}`}>Active Classes</button>
+            <button onClick={() => setActiveTab('archived')} className={`pb-2 font-bold text-sm transition-smooth ${activeTab === 'archived' ? 'text-[var(--color-silid-coral)] border-b-2 border-[var(--color-silid-coral)]' : 'text-gray-400 hover:text-gray-600'}`}>Archived</button>
+          </div>
+        </div>
+
+        {classes.filter(c => activeTab === 'archived' ? c.isArchived : !c.isArchived).length === 0 ? (
           <div className="bg-white border-2 border-dashed border-gray-200 rounded-3xl p-16 text-center shadow-soft">
             <div className="w-24 h-24 bg-[var(--color-silid-cream)] rounded-full flex items-center justify-center mx-auto mb-6 text-gray-300">
               <BookOpen size={48} />
@@ -352,10 +373,21 @@ export const Dashboard = () => {
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {classes.map((cls, idx) => (
+            {classes.filter(c => activeTab === 'archived' ? c.isArchived : !c.isArchived).map((cls, idx) => (
               <Link key={cls.id} to={`/class/${cls.id}`} className="block group animate-fade-up" style={{ animationDelay: `${idx * 50}ms` }}>
-                <div className="bg-white rounded-2xl shadow-soft border border-gray-100/50 overflow-hidden hover:shadow-elevated transition-smooth transform group-hover:-translate-y-1">
-                  <div className={`h-36 ${GRADIENTS[cls.id % GRADIENTS.length]} p-6 flex flex-col justify-end relative overflow-hidden`}>
+                <div className="bg-white rounded-2xl shadow-soft border border-gray-100/50 overflow-hidden hover:shadow-elevated transition-smooth transform group-hover:-translate-y-1 relative">
+                  
+                  {user?.role === 'teacher' && (
+                    <button 
+                      onClick={(e) => handleToggleArchive(e, cls.id, cls.isArchived)}
+                      className="absolute top-3 right-3 z-20 w-8 h-8 bg-black/20 hover:bg-black/40 backdrop-blur-sm rounded-lg flex items-center justify-center text-white transition-smooth shadow-sm btn-press"
+                      title={cls.isArchived ? "Restore Class" : "Archive Class"}
+                    >
+                      {cls.isArchived ? <ArchiveRestore size={16} /> : <Archive size={16} />}
+                    </button>
+                  )}
+
+                  <div className={`h-36 ${GRADIENTS[cls.id % GRADIENTS.length]} p-6 flex flex-col justify-end relative overflow-hidden ${cls.isArchived ? 'grayscale opacity-80' : ''}`}>
                     <div className="absolute top-0 right-0 p-4 opacity-15 transform translate-x-6 -translate-y-4">
                       <BookOpen size={120} className="text-white" />
                     </div>
@@ -372,7 +404,9 @@ export const Dashboard = () => {
                         <Users size={16} className="text-[var(--color-silid-coral)]" />
                         <span>{cls._count?.enrollments || 0} {t('students')}</span>
                       </div>
-                      <span className="bg-green-50 text-green-700 text-xs font-bold px-2.5 py-1 rounded-full">{t('active')}</span>
+                      <span className={`${cls.isArchived ? 'bg-gray-100 text-gray-500 dark:bg-gray-800' : 'bg-green-50 text-green-700 dark:bg-green-900/30'} text-xs font-bold px-2.5 py-1 rounded-full`}>
+                        {cls.isArchived ? 'Archived' : t('active')}
+                      </span>
                     </div>
                     <div className="flex items-center gap-2 text-xs text-gray-400">
                       <Clock size={14} />

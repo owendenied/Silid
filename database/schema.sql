@@ -68,6 +68,7 @@ CREATE TABLE public.classrooms (
   "leaderboardEnabled" boolean NOT NULL DEFAULT false,
   "coverColor" character varying(20) NOT NULL DEFAULT '#1B6CA8'::character varying,
   image text NULL,
+  "isArchived" boolean NOT NULL DEFAULT false,
   "createdAt" timestamp without time zone NOT NULL DEFAULT now(),
   "updatedAt" timestamp without time zone NOT NULL DEFAULT now(),
   CONSTRAINT classrooms_pkey PRIMARY KEY (id),
