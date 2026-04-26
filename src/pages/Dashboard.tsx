@@ -210,34 +210,47 @@ export const Dashboard = () => {
     if (!user || !foundClass) return;
     setIsSubmitting(true);
     setErrorMsg('');
+    
     try {
       const currentDbId = await ensureDbId();
-      const { data: existing } = await supabase.from('enrollments').select('*').eq('classroomId', foundClass.id).eq('studentId', currentDbId).single();
-      if (existing) {
-        setErrorMsg('You are already enrolled in this class.');
-        setIsSubmitting(false);
-        return;
-      }
-      const { error: enrollError } = await supabase.from('enrollments').insert([{
-        classroomId: foundClass.id,
-        studentId: currentDbId,
-        section: joinSection || null
-      }]);
-      if (enrollError) throw enrollError;
+      
+      // Optimitiscally close modal
+      const pendingClass = { ...foundClass };
+      const pendingSection = joinSection;
+      
       setIsModalOpen(false);
       setJoinCode('');
       setJoinSection('');
       setFoundClass(null);
       
-      // Refresh classes
-      const { data: enrolled } = await supabase.from('enrollments').select('classroomId').eq('studentId', currentDbId);
-      const classroomIds = enrolled?.map((e: any) => e.classroomId) || [];
-      if (classroomIds.length > 0) {
-        const { data: refreshData } = await supabase.from('classrooms').select('*').in('id', classroomIds);
-        setClasses(refreshData || []);
+      // Optimistically add to UI
+      setClasses(prev => [...prev, { ...pendingClass, _count: { enrollments: 0 } }]);
+
+      const { data: existing } = await supabase.from('enrollments').select('*').eq('classroomId', pendingClass.id).eq('studentId', currentDbId).single();
+      if (existing) {
+        // Revert optimistic update if already enrolled
+        setClasses(prev => prev.filter(c => c.id !== pendingClass.id));
+        setErrorMsg('You are already enrolled in this class.');
+        setIsSubmitting(false);
+        setIsModalOpen(true);
+        return;
       }
+      
+      const { error: enrollError } = await supabase.from('enrollments').insert([{
+        classroomId: pendingClass.id,
+        studentId: currentDbId,
+        section: pendingSection || null
+      }]);
+      
+      if (enrollError) {
+        // Revert optimistic update
+        setClasses(prev => prev.filter(c => c.id !== pendingClass.id));
+        throw enrollError;
+      }
+
     } catch (error: any) {
       setErrorMsg(error.message || 'Error joining class.');
+      setIsModalOpen(true); // Re-open if it failed
     } finally {
       setIsSubmitting(false);
     }
