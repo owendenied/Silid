@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Users, GraduationCap, BookOpen, Sparkles, Shield, Zap, Moon, Sun } from 'lucide-react';
+import { Users, GraduationCap, Sparkles, Shield, Zap, Moon, Sun } from 'lucide-react';
 import { useAppStore } from '../store/useAppStore';
 import { supabase } from '../lib/supabase';
 import { useT } from '../lib/i18n';

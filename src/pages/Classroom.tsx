@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useAppStore } from '../store/useAppStore';
-import { Download, FileText, Plus, X, BookOpen, Megaphone, Send, Paperclip, BarChart3, Wand2, Archive } from 'lucide-react';
+import { FileText, Plus, X, BookOpen, Megaphone, Send, Paperclip, BarChart3, Wand2, Archive } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useT } from '../lib/i18n';
 import { generateModuleContent } from '../lib/ai';
@@ -41,9 +41,6 @@ export const Classroom = () => {
   const [enrolledStudents, setEnrolledStudents] = useState<any[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isAnnouncementModalOpen, setIsAnnouncementModalOpen] = useState(false);
-  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
-  const [csvFile, setCsvFile] = useState<File | null>(null);
-  const [importStatus, setImportStatus] = useState('');
   
   // AI Module Generator state
   const [isAIModuleModalOpen, setIsAIModuleModalOpen] = useState(false);
@@ -545,15 +542,6 @@ export const Classroom = () => {
                       : `${enrolledStudents.filter(s => enrollmentSections[s.id] === sectionFilter).length} students`
                     }
                   </span>
-                  {user?.dbId === classroom.teacherId && (
-                    <button 
-                      onClick={() => setIsImportModalOpen(true)}
-                      className="flex items-center gap-2 text-[var(--color-silid-coral)] hover:bg-red-50 px-3 py-1.5 rounded-xl border border-[var(--color-silid-coral)]/30 transition-smooth text-xs font-bold btn-press"
-                    >
-                      <Plus size={14} />
-                      Import CSV
-                    </button>
-                  )}
                 </div>
               </div>
 
@@ -943,138 +931,6 @@ export const Classroom = () => {
                   </div>
                 </div>
               )}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* CSV Import Modal */}
-      {isImportModalOpen && (
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-2xl w-full max-w-md overflow-hidden shadow-elevated animate-fade-up">
-            <div className="p-6 border-b border-gray-100 flex justify-between items-center">
-              <h3 className="text-xl font-extrabold font-display text-gray-900">Import Student List</h3>
-              <button onClick={() => { setIsImportModalOpen(false); setImportStatus(''); setCsvFile(null); }} className="p-2 hover:bg-gray-100 rounded-full transition-smooth">
-                <X size={20} />
-              </button>
-            </div>
-            <div className="p-6 space-y-4">
-              <div className="bg-blue-50 p-4 rounded-xl border border-blue-100 text-sm text-blue-800">
-                <p className="font-bold mb-1">CSV Format Required:</p>
-                <p className="font-mono text-xs">name, email</p>
-                <p className="text-xs mt-1 text-blue-600">One student per line. Students will be auto-enrolled.</p>
-              </div>
-              
-              <div className="border-2 border-dashed border-gray-200 rounded-2xl p-8 text-center hover:border-[var(--color-silid-coral)] transition-smooth cursor-pointer group">
-                <input type="file" className="hidden" id="csvFileInput" accept=".csv,.txt" onChange={e => setCsvFile(e.target.files?.[0] || null)} />
-                <label htmlFor="csvFileInput" className="cursor-pointer">
-                  <div className="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-3 group-hover:bg-red-50 transition-smooth">
-                    <Download className="text-gray-400 group-hover:text-[var(--color-silid-coral)]" size={24} />
-                  </div>
-                  <p className="text-gray-600 font-bold">{csvFile ? csvFile.name : 'Click to upload CSV'}</p>
-                  <p className="text-xs text-gray-400 mt-1">or drag and drop here</p>
-                </label>
-              </div>
-
-              {importStatus && (
-                <div className={`p-3 rounded-xl text-sm font-medium ${importStatus.includes('✅') ? 'bg-green-50 text-green-700' : importStatus.includes('❌') ? 'bg-red-50 text-red-700' : 'bg-blue-50 text-blue-700'}`}>
-                  {importStatus}
-                </div>
-              )}
-
-              <div className="pt-4 flex gap-3">
-                <button 
-                  onClick={async () => {
-                    if (!csvFile || !id) return;
-                    setImportStatus('⏳ Processing CSV...');
-                    try {
-                      const text = await csvFile.text();
-                      const lines = text.trim().split('\n').filter(l => l.trim());
-                      let imported = 0;
-                      
-                      for (let i = 0; i < lines.length; i++) {
-                        const line = lines[i];
-                        if (i === 0 && line.toLowerCase().includes('name')) continue; // Skip header
-                        
-                        const parts = line.split(',').map(p => p.trim().replace(/"/g, ''));
-                        if (parts.length < 2) continue;
-                        const [name, email] = parts;
-                        if (!name || !email) continue;
-                        
-                        // Check existing user
-                        const { data: existingUser, error: findErr } = await supabase
-                          .from('users')
-                          .select('id')
-                          .eq('email', email)
-                          .maybeSingle();
-                          
-                        if (findErr) throw findErr;
-                        
-                        let studentId: number;
-                        if (existingUser) {
-                          studentId = existingUser.id;
-                        } else {
-                          const { data: newUser, error: insertErr } = await supabase
-                            .from('users')
-                            .insert([{ 
-                              openId: `csv-${Date.now()}-${Math.floor(Math.random() * 10000)}`, 
-                              name, 
-                              email, 
-                              "appRole": 'student'
-                            }])
-                            .select('id')
-                            .single();
-                            
-                          if (insertErr) throw insertErr;
-                          if (!newUser) continue;
-                          studentId = newUser.id;
-                        }
-                        
-                        // Check existing enrollment
-                        const { data: existingEnroll, error: enrollFindErr } = await supabase
-                          .from('enrollments')
-                          .select('id')
-                          .eq('classroomId', Number(id))
-                          .eq('studentId', studentId)
-                          .maybeSingle();
-                          
-                        if (enrollFindErr) throw enrollFindErr;
-                        
-                        if (!existingEnroll) {
-                          const { error: enrollInsertErr } = await supabase
-                            .from('enrollments')
-                            .insert([{ classroomId: Number(id), studentId }]);
-                            
-                          if (enrollInsertErr) throw enrollInsertErr;
-                        }
-                        imported++;
-                      }
-                      
-                      setImportStatus(`✅ Successfully imported ${imported} student(s)!`);
-                      // Refresh enrolled students
-                      const { data: enrollData } = await supabase.from('enrollments').select('studentId').eq('classroomId', Number(id));
-                      if (enrollData) {
-                        const sIds = enrollData.map((e: any) => e.studentId);
-                        const { data: studentsData } = await supabase.from('users').select('*').in('id', sIds);
-                        setEnrolledStudents(studentsData || []);
-                      }
-                    } catch (err: any) {
-                      console.error('CSV Import Error:', err);
-                      setImportStatus(`❌ Error: ${err?.message || (err instanceof Error ? err.message : 'Unknown error')}`);
-                    }
-                  }}
-                  disabled={!csvFile}
-                  className="flex-1 bg-gradient-coral text-white py-3 rounded-xl font-bold hover:scale-[1.02] shadow-glow-coral transition-smooth btn-press disabled:opacity-50"
-                >
-                  Confirm Import
-                </button>
-                <button 
-                  onClick={() => { setIsImportModalOpen(false); setImportStatus(''); setCsvFile(null); }}
-                  className="px-6 py-3 border border-gray-200 rounded-xl font-bold hover:bg-gray-50 transition-smooth btn-press"
-                >
-                  {t('cancel')}
-                </button>
-              </div>
             </div>
           </div>
         </div>

@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Outlet, Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAppStore } from '../store/useAppStore';
-import { BookOpen, LogOut, WifiOff, Award, Globe, Wifi, Home, MessageSquare, User, Moon, Sun } from 'lucide-react';
+import { LogOut, WifiOff, Award, Globe, Wifi, Home, MessageSquare, User, Moon, Sun } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { getLevelInfo } from '../lib/levels';
 import { useSync } from '../hooks/useSync';
