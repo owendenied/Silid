@@ -103,14 +103,21 @@ export const Dashboard = () => {
             const result = await supabase.from('classrooms').select('*').in('id', classroomIds);
             data = result.data;
 
-            // 3. Fetch Tasks (Assignments) for these classrooms
-            const { count: taskCount, error: taskError } = await supabase
-              .from('assignments')
-              .select('*', { count: 'exact', head: true })
-              .in('classroomId', classroomIds);
-            
-            if (taskError) console.error('❌ Task Fetch Error:', taskError);
-            setStats(prev => ({ ...prev, pendingAssignments: taskCount || 0 }));
+            // Get active classroom IDs for task stats
+            const activeClassroomIds = (data || []).filter(c => !c.isArchived).map(c => c.id);
+
+            // 3. Fetch Tasks (Assignments) for active classrooms only
+            if (activeClassroomIds.length > 0) {
+              const { count: taskCount, error: taskError } = await supabase
+                .from('assignments')
+                .select('*', { count: 'exact', head: true })
+                .in('classroomId', activeClassroomIds);
+              
+              if (taskError) console.error('❌ Task Fetch Error:', taskError);
+              setStats(prev => ({ ...prev, pendingAssignments: taskCount || 0 }));
+            } else {
+              setStats(prev => ({ ...prev, pendingAssignments: 0 }));
+            }
           } else {
             data = [];
             setStats(prev => ({ ...prev, pendingAssignments: 0 }));
@@ -314,7 +321,7 @@ export const Dashboard = () => {
           </div>
           <div>
             <p className="text-gray-500 font-bold text-xs uppercase tracking-wider">{user?.role === 'teacher' ? t('dash.my_classes') : t('dash.classes')}</p>
-            <p className="text-3xl font-extrabold font-display text-gray-900">{classes.length}</p>
+            <p className="text-3xl font-extrabold font-display text-gray-900">{classes.filter(c => !c.isArchived).length}</p>
           </div>
         </div>
 
