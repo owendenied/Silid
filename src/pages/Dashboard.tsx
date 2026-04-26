@@ -126,7 +126,7 @@ export const Dashboard = () => {
 
         if (user.role === 'teacher') {
           const studentCount = counts?.filter((e: any) =>
-            (data || []).some((cls: any) => cls.id === e.classroomId)
+            (data || []).some((cls: any) => cls.id === e.classroomId && !cls.isArchived)
           ).length || 0;
           setStats(prev => ({ ...prev, totalStudents: studentCount }));
         }
