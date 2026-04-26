@@ -91,8 +91,8 @@ export const Login = () => {
           <div className="absolute top-1/3 right-1/4 w-32 h-32 rounded-full bg-white/15" />
         </div>
         <div className="relative z-10 text-center max-w-md">
-          <div className="w-20 h-20 rounded-2xl bg-white/20 backdrop-blur-sm flex items-center justify-center mx-auto mb-8 shadow-lg">
-            <BookOpen size={40} className="text-white" />
+          <div className="w-20 h-20 mx-auto mb-8">
+            <img src="/logo.png" alt="Silid Logo" className="w-full h-full rounded-2xl shadow-lg object-cover" />
           </div>
           <h1 className="text-5xl font-extrabold font-display mb-4 tracking-tight">Silid</h1>
           <p className="text-xl text-white/80 font-medium mb-12">Your premium Filipino Learning Management System</p>
@@ -128,9 +128,7 @@ export const Login = () => {
         <div className="max-w-md mx-auto w-full">
           {/* Mobile logo */}
           <div className="lg:hidden flex items-center gap-3 mb-8">
-            <div className="w-12 h-12 rounded-2xl bg-gradient-coral flex items-center justify-center shadow-glow-coral">
-              <BookOpen size={24} className="text-white" />
-            </div>
+            <img src="/logo.png" alt="Silid Logo" className="w-12 h-12 rounded-2xl shadow-glow-coral object-cover" />
             <span className="text-3xl font-extrabold font-display bg-gradient-to-r from-[var(--color-silid-coral)] to-[var(--color-silid-yellow)] bg-clip-text text-transparent">Silid</span>
           </div>
 

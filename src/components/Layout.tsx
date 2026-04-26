@@ -42,9 +42,7 @@ export const Layout = () => {
     return (
       <div className="min-h-screen flex items-center justify-center bg-[var(--background)]">
         <div className="flex flex-col items-center gap-4">
-          <div className="w-16 h-16 rounded-2xl bg-gradient-coral flex items-center justify-center shadow-glow-coral animate-pulse">
-            <BookOpen className="text-white" size={32} />
-          </div>
+          <img src="/logo.png" alt="Silid Logo" className="w-16 h-16 rounded-2xl shadow-glow-coral animate-pulse object-cover" />
           <p className="text-gray-500 font-medium font-display">{t('loading')}</p>
         </div>
       </div>
@@ -81,9 +79,7 @@ export const Layout = () => {
           <div className="flex justify-between h-14 md:h-16">
             <div className="flex">
               <Link to="/dashboard" className="flex-shrink-0 flex items-center gap-2 group">
-                <div className="w-8 h-8 md:w-9 md:h-9 rounded-xl bg-gradient-coral flex items-center justify-center shadow-glow-coral transition-smooth group-hover:scale-105">
-                  <BookOpen className="text-white" size={18} />
-                </div>
+                <img src="/logo.png" alt="Silid Logo" className="w-8 h-8 md:w-9 md:h-9 rounded-xl shadow-glow-coral transition-smooth group-hover:scale-105 object-cover" />
                 <span className="text-lg md:text-xl font-extrabold font-display bg-gradient-to-r from-[var(--color-silid-coral)] to-[var(--color-silid-yellow)] bg-clip-text text-transparent">
                   Silid
                 </span>

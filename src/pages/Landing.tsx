@@ -7,7 +7,7 @@ export const Landing = () => {
     <div className="flex flex-col min-h-screen">
       <header className="flex justify-between items-center p-6 bg-white shadow-sm border-b border-gray-200">
         <div className="flex items-center gap-2">
-          <BookOpen className="text-[var(--color-silid-teal)]" size={32} />
+          <img src="/logo.png" alt="Silid Logo" className="w-8 h-8 object-cover rounded-lg shadow-sm" />
           <h1 className="text-2xl font-bold text-[var(--color-silid-teal)]">Silid</h1>
         </div>
         <div className="flex gap-4">
