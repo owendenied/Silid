@@ -11,7 +11,7 @@ export const Login = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
-  const [role, setRole] = useState<'student' | 'teacher'>('student');
+  const [role, setRole] = useState<'student' | 'teacher' | null>(null);
   const [isRegistering, setIsRegistering] = useState(false);
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -31,6 +31,10 @@ export const Login = () => {
     
     try {
       if (isRegistering) {
+        if (!role) {
+          throw new Error('Please select whether you are a Student or Instructor first.');
+        }
+
         const { data: authData, error: authError } = await supabase.auth.signUp({
           email, password,
           options: { data: { full_name: name, role: role } }
@@ -193,8 +197,12 @@ export const Login = () => {
               <div className="relative flex justify-center text-sm"><span className="px-4 bg-[var(--background)] text-gray-400 font-medium">{t('login.or')}</span></div>
             </div>
             <div className="mt-5">
-              <button onClick={async () => {
-                const currentRole = role; // Capture current state
+              <button type="button" onClick={async () => {
+                const currentRole = role;
+                if (!currentRole) {
+                  setError('Please select whether you are a Student or Instructor first.');
+                  return;
+                }
                 localStorage.setItem('pending_role', currentRole);
                 
                 const { error } = await supabase.auth.signInWithOAuth({ 
