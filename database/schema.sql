@@ -169,6 +169,7 @@ CREATE TABLE public.enrollments (
   id serial NOT NULL,
   "classroomId" integer NOT NULL,
   "studentId" integer NOT NULL,
+  section character varying(100) NULL,
   "enrolledAt" timestamp without time zone NOT NULL DEFAULT now(),
   CONSTRAINT enrollments_pkey PRIMARY KEY (id),
   CONSTRAINT enrollments_classroomId_fkey FOREIGN KEY ("classroomId") REFERENCES classrooms (id) ON DELETE CASCADE,

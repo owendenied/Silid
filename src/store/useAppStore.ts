@@ -73,6 +73,7 @@ supabase.auth.onAuthStateChange(async (_event, session) => {
     const pendingRole = localStorage.getItem('pending_role') as 'student' | 'teacher' || 'student';
     
     try {
+      // Use quoted "openId" for case sensitivity
       const { data: userData } = await supabase
         .from('users')
         .select('*')

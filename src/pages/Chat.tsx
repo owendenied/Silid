@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom';
 import { useAppStore } from '../store/useAppStore';
 import { askGemini } from '../lib/ai';
 import { useT } from '../lib/i18n';
+import ReactMarkdown from 'react-markdown';
 
 interface Message {
   id: string;
@@ -127,7 +128,27 @@ export const Chat = () => {
                   ? 'bg-gradient-teal text-white rounded-tr-md' 
                   : 'bg-white text-gray-800 rounded-tl-md border border-gray-100'
               }`}>
-                <p className="text-sm whitespace-pre-wrap leading-relaxed">{msg.content}</p>
+                <div className={`text-sm leading-relaxed whitespace-pre-wrap break-words ${msg.role === 'user' ? 'text-white' : 'text-gray-800'}`}>
+                  {msg.role === 'user' ? (
+                    msg.content
+                  ) : (
+                    <ReactMarkdown
+                      components={{
+                        p: ({node, ...props}) => <p className="mb-2 last:mb-0" {...props} />,
+                        strong: ({node, ...props}) => <strong className="font-bold" {...props} />,
+                        em: ({node, ...props}) => <em className="italic" {...props} />,
+                        ul: ({node, ...props}) => <ul className="list-disc pl-5 mb-2 last:mb-0 space-y-1" {...props} />,
+                        ol: ({node, ...props}) => <ol className="list-decimal pl-5 mb-2 last:mb-0 space-y-1" {...props} />,
+                        li: ({node, ...props}) => <li {...props} />,
+                        h1: ({node, ...props}) => <h1 className="text-lg font-bold mb-2" {...props} />,
+                        h2: ({node, ...props}) => <h2 className="text-base font-bold mb-2" {...props} />,
+                        h3: ({node, ...props}) => <h3 className="text-sm font-bold mb-1" {...props} />
+                      }}
+                    >
+                      {msg.content}
+                    </ReactMarkdown>
+                  )}
+                </div>
                 <span className={`text-[10px] mt-1.5 block opacity-50 ${msg.role === 'user' ? 'text-right' : 'text-left'}`}>
                   {msg.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                 </span>

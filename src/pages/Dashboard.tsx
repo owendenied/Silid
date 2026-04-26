@@ -108,7 +108,7 @@ export const Dashboard = () => {
 
   useEffect(() => {
     if (user) fetchClasses();
-  }, [user?.id, isModalOpen, isAIModalOpen]); // Re-fetch when modals close
+  }, [user?.id, isModalOpen, isAIModalOpen]);
 
   const handleCreateClass = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -141,7 +141,6 @@ export const Dashboard = () => {
     try {
       const dbId = await ensureDbId();
       
-      // 1. Find the class
       const { data: classroom, error: findError } = await supabase.from('classrooms').select('*').eq('"joinCode"', code).maybeSingle();
       if (findError) throw findError;
       if (!classroom) {
@@ -150,7 +149,6 @@ export const Dashboard = () => {
         return;
       }
 
-      // 2. Check if already enrolled
       const { data: existing } = await supabase.from('enrollments').select('*').eq('"classroomId"', classroom.id).eq('"studentId"', dbId).maybeSingle();
       if (existing) {
         setErrorMsg('You are already in this class!');
@@ -158,7 +156,6 @@ export const Dashboard = () => {
         return;
       }
 
-      // 3. Enroll
       const { error: enrollError } = await supabase.from('enrollments').insert([{
         "classroomId": classroom.id, "studentId": dbId
       }]);
@@ -198,7 +195,6 @@ export const Dashboard = () => {
         </div>
       </div>
 
-      {/* Stats */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <div className="bg-white p-7 rounded-2xl shadow-soft border border-gray-100 flex items-center gap-5">
           <div className="w-14 h-14 bg-gradient-coral text-white rounded-2xl flex items-center justify-center"><GraduationCap size={28} /></div>
@@ -223,7 +219,6 @@ export const Dashboard = () => {
         </div>
       </div>
 
-      {/* Classes Grid */}
       <div>
         <h2 className="text-2xl font-extrabold font-display text-gray-900 mb-6">{t('dash.your_classes')}</h2>
         {classes.length === 0 ? (
@@ -255,7 +250,6 @@ export const Dashboard = () => {
         )}
       </div>
 
-      {/* Single Step Join/Create Modal */}
       {isModalOpen && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl shadow-elevated w-full max-w-md overflow-hidden animate-fade-up">
@@ -293,11 +287,9 @@ export const Dashboard = () => {
         </div>
       )}
 
-      {/* AI Modal remains the same but pauses background sync when open */}
       {isAIModalOpen && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
            <div className="bg-white rounded-2xl w-full max-w-2xl overflow-hidden animate-fade-up">
-             {/* AI Modal Content ... */}
              <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-gradient-coral text-white">
                <h3 className="text-xl font-bold">AI Lesson Plan Generator</h3>
                <button onClick={() => setIsAIModalOpen(false)}><X size={20} /></button>

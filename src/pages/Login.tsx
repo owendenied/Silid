@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Users, GraduationCap, BookOpen, Sparkles, Shield, Zap } from 'lucide-react';
 import { useAppStore } from '../store/useAppStore';
@@ -19,9 +19,10 @@ export const Login = () => {
 
   const navigate = useNavigate();
 
-  if (user) {
-    navigate('/dashboard');
-  }
+  // Redirect to dashboard if already logged in
+  useEffect(() => {
+    if (user) navigate('/dashboard');
+  }, [user, navigate]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

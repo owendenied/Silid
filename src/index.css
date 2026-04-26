@@ -26,6 +26,14 @@
     --nav-bg: rgba(255,255,255,0.85);
   }
 
+  .dark {
+    --background: #0f172a; /* deep slate blue for Filipino night vibe */
+    --foreground: #f8fafc;
+    --card-bg: #1e293b;
+    --card-border: rgba(255,255,255,0.08);
+    --nav-bg: rgba(15,23,42,0.85);
+  }
+
   body {
     background-color: var(--background);
     color: var(--foreground);
@@ -37,6 +45,27 @@
   h1, h2, h3, h4, h5, h6, .font-display {
     font-family: 'Plus Jakarta Sans', 'Inter', system-ui, sans-serif;
   }
+
+  /* Global dark mode overrides for hardcoded Tailwind classes */
+  .dark .bg-white { background-color: var(--card-bg) !important; }
+  .dark .text-gray-900 { color: #f8fafc !important; }
+  .dark .text-gray-800 { color: #f1f5f9 !important; }
+  .dark .text-gray-700 { color: #e2e8f0 !important; }
+  .dark .text-gray-600 { color: #cbd5e1 !important; }
+  .dark .text-gray-500 { color: #94a3b8 !important; }
+  .dark .bg-gray-50 { background-color: rgba(255,255,255,0.02) !important; }
+  .dark .bg-gray-100 { background-color: rgba(255,255,255,0.05) !important; }
+  .dark .border-gray-100 { border-color: rgba(255,255,255,0.05) !important; }
+  .dark .border-gray-200 { border-color: rgba(255,255,255,0.1) !important; }
+  .dark .hover\:bg-gray-50:hover { background-color: rgba(255,255,255,0.04) !important; }
+  
+  /* Alerts & Highlights */
+  .dark .bg-red-50 { background-color: rgba(239, 68, 68, 0.15) !important; }
+  .dark .text-red-600 { color: #fca5a5 !important; }
+  .dark .bg-amber-50 { background-color: rgba(245, 158, 11, 0.15) !important; }
+  .dark .text-amber-600 { color: #fcd34d !important; }
+  .dark .bg-blue-50 { background-color: rgba(59, 130, 246, 0.15) !important; }
+  .dark .text-blue-600 { color: #93c5fd !important; }
 }
 
 @layer utilities {
@@ -46,6 +75,11 @@
     backdrop-filter: blur(12px);
     -webkit-backdrop-filter: blur(12px);
     border: 1px solid rgba(255, 255, 255, 0.3);
+  }
+
+  .dark .glass {
+    background: rgba(15, 23, 42, 0.75);
+    border: 1px solid rgba(255, 255, 255, 0.05);
   }
 
   .glass-dark {

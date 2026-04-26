@@ -1,14 +1,14 @@
 import { useState, useEffect } from 'react';
 import { Outlet, Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAppStore } from '../store/useAppStore';
-import { BookOpen, LogOut, WifiOff, Award, Globe, Wifi, Home, MessageSquare, User } from 'lucide-react';
+import { BookOpen, LogOut, WifiOff, Award, Globe, Wifi, Home, MessageSquare, User, Moon, Sun } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { getLevelInfo } from '../lib/levels';
 import { useSync } from '../hooks/useSync';
 import { useT, useLanguageStore } from '../lib/i18n';
 
 export const Layout = () => {
-  const { user, isOffline, isInitializing, logout, setUser } = useAppStore();
+  const { user, isOffline, isInitializing, theme, logout, setUser, setTheme } = useAppStore();
   const { syncing } = useSync();
   const navigate = useNavigate();
   const location = useLocation();
@@ -21,6 +21,14 @@ export const Layout = () => {
       navigate('/login');
     }
   }, [user, isInitializing, navigate]);
+
+  useEffect(() => {
+    if (theme === 'dark') {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
+  }, [theme]);
 
   useEffect(() => {
     if (!user?.id) return;
@@ -92,10 +100,17 @@ export const Layout = () => {
               {/* Language Toggle */}
               <button
                 onClick={() => setLang(lang === 'en' ? 'tl' : 'en')}
-                className="flex items-center gap-1 px-2 md:px-3 py-1.5 text-[10px] md:text-xs font-bold rounded-full border border-gray-200/60 hover:bg-white/50 transition-smooth text-gray-600 btn-press"
+                className="flex items-center gap-1 px-2 md:px-3 py-1.5 text-[10px] md:text-xs font-bold rounded-full border border-gray-200/60 dark:border-gray-700 hover:bg-white/50 dark:hover:bg-gray-800 transition-smooth text-gray-600 dark:text-gray-300 btn-press"
               >
                 <Globe size={12} />
                 <span className="hidden sm:inline">{t('nav.language')}</span>
+              </button>
+
+              <button
+                onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+                className="flex items-center gap-1 px-2 md:px-3 py-1.5 text-[10px] md:text-xs font-bold rounded-full border border-gray-200/60 dark:border-gray-700 hover:bg-white/50 dark:hover:bg-gray-800 transition-smooth text-gray-600 dark:text-gray-300 btn-press"
+              >
+                {theme === 'dark' ? <Sun size={12} /> : <Moon size={12} />}
               </button>
 
               {user.role === 'student' && (
