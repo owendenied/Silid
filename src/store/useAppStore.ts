@@ -75,7 +75,7 @@ window.addEventListener('offline', () => {
 // Setup Supabase auth listener
 supabase.auth.onAuthStateChange(async (_event, session) => {
   if (session?.user) {
-    const pendingRole = localStorage.getItem('pending_role') as 'student' | 'teacher' || 'student';
+    const pendingRole = localStorage.getItem('pending_role') as 'student' | 'teacher' | null;
     
     try {
       // Use quoted "openId" for case sensitivity
@@ -86,6 +86,20 @@ supabase.auth.onAuthStateChange(async (_event, session) => {
         .maybeSingle();
 
       if (userData) {
+        let finalRole = userData.appRole;
+
+        // Failsafe for DB Triggers overriding the role on Google OAuth
+        if (pendingRole && pendingRole !== userData.appRole) {
+          const createdTime = new Date(userData.createdAt).getTime();
+          const now = new Date().getTime();
+          // If account is less than 60 seconds old, it's a new signup
+          if (now - createdTime < 60000) {
+            await supabase.from('users').update({ "appRole": pendingRole }).eq('id', userData.id);
+            finalRole = pendingRole;
+          }
+        }
+        localStorage.removeItem('pending_role');
+
         const { data: progressData } = await supabase
           .from('userProgress')
           .select('xp')
@@ -95,7 +109,7 @@ supabase.auth.onAuthStateChange(async (_event, session) => {
         useAppStore.getState().setUser({
           id: session.user.id,
           dbId: userData.id,
-          role: (userData.appRole || 'student') as 'student' | 'teacher',
+          role: (finalRole || 'student') as 'student' | 'teacher',
           name: userData.name || session.user.user_metadata?.full_name || 'User',
           email: session.user.email || '',
           xp: progressData?.xp || 0
@@ -107,7 +121,7 @@ supabase.auth.onAuthStateChange(async (_event, session) => {
             "openId": session.user.id,
             name: session.user.user_metadata?.full_name || 'User',
             email: session.user.email || '',
-            "appRole": pendingRole,
+            "appRole": pendingRole || 'student',
           }])
           .select()
           .maybeSingle();
