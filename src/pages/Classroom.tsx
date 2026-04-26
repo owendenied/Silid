@@ -991,28 +991,66 @@ export const Classroom = () => {
                       const text = await csvFile.text();
                       const lines = text.trim().split('\n').filter(l => l.trim());
                       let imported = 0;
-                      for (const line of lines) {
+                      
+                      for (let i = 0; i < lines.length; i++) {
+                        const line = lines[i];
+                        if (i === 0 && line.toLowerCase().includes('name')) continue; // Skip header
+                        
                         const parts = line.split(',').map(p => p.trim().replace(/"/g, ''));
                         if (parts.length < 2) continue;
                         const [name, email] = parts;
                         if (!name || !email) continue;
-                        // Create user
-                        const { data: existingUser } = await supabase.from('users').select('id').eq('email', email).single();
+                        
+                        // Check existing user
+                        const { data: existingUser, error: findErr } = await supabase
+                          .from('users')
+                          .select('id')
+                          .eq('email', email)
+                          .maybeSingle();
+                          
+                        if (findErr) throw findErr;
+                        
                         let studentId: number;
                         if (existingUser) {
                           studentId = existingUser.id;
                         } else {
-                          const { data: newUser } = await supabase.from('users').insert([{ openId: `csv-${Date.now()}-${Math.random()}`, name, email, appRole: 'student', xp: 0 }]).select('id').single();
+                          const { data: newUser, error: insertErr } = await supabase
+                            .from('users')
+                            .insert([{ 
+                              openId: `csv-${Date.now()}-${Math.floor(Math.random() * 10000)}`, 
+                              name, 
+                              email, 
+                              "appRole": 'student', 
+                              xp: 0 
+                            }])
+                            .select('id')
+                            .single();
+                            
+                          if (insertErr) throw insertErr;
                           if (!newUser) continue;
                           studentId = newUser.id;
                         }
-                        // Enroll
-                        const { data: existingEnroll } = await supabase.from('enrollments').select('id').eq('classroomId', Number(id)).eq('studentId', studentId).single();
+                        
+                        // Check existing enrollment
+                        const { data: existingEnroll, error: enrollFindErr } = await supabase
+                          .from('enrollments')
+                          .select('id')
+                          .eq('classroomId', Number(id))
+                          .eq('studentId', studentId)
+                          .maybeSingle();
+                          
+                        if (enrollFindErr) throw enrollFindErr;
+                        
                         if (!existingEnroll) {
-                          await supabase.from('enrollments').insert([{ classroomId: Number(id), studentId }]);
+                          const { error: enrollInsertErr } = await supabase
+                            .from('enrollments')
+                            .insert([{ classroomId: Number(id), studentId }]);
+                            
+                          if (enrollInsertErr) throw enrollInsertErr;
                         }
                         imported++;
                       }
+                      
                       setImportStatus(`✅ Successfully imported ${imported} student(s)!`);
                       // Refresh enrolled students
                       const { data: enrollData } = await supabase.from('enrollments').select('studentId').eq('classroomId', Number(id));
