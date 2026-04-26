@@ -14,9 +14,11 @@ interface AppState {
 
   isOffline: boolean;
   isInitializing: boolean;
+  theme: 'light' | 'dark';
   setUser: (user: AppState['user']) => void;
   setOfflineStatus: (status: boolean) => void;
   setInitializing: (status: boolean) => void;
+  setTheme: (theme: 'light' | 'dark') => void;
   logout: () => Promise<void>;
 }
 
@@ -26,9 +28,11 @@ export const useAppStore = create<AppState>()(
       user: null,
       isOffline: !navigator.onLine,
       isInitializing: true,
+      theme: 'light',
       setUser: (user) => set({ user }),
       setOfflineStatus: (isOffline) => set({ isOffline }),
       setInitializing: (isInitializing) => set({ isInitializing }),
+      setTheme: (theme) => set({ theme }),
       logout: async () => {
         // 1. Clear state immediately
         set({ user: null });
@@ -48,7 +52,8 @@ export const useAppStore = create<AppState>()(
       name: 'silid-storage',
       partialize: (state) => ({ 
         user: state.user,
-        isOffline: state.isOffline 
+        isOffline: state.isOffline,
+        theme: state.theme
       }),
     }
 
