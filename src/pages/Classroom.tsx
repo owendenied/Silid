@@ -1020,8 +1020,7 @@ export const Classroom = () => {
                               openId: `csv-${Date.now()}-${Math.floor(Math.random() * 10000)}`, 
                               name, 
                               email, 
-                              "appRole": 'student', 
-                              xp: 0 
+                              "appRole": 'student'
                             }])
                             .select('id')
                             .single();
@@ -1059,9 +1058,9 @@ export const Classroom = () => {
                         const { data: studentsData } = await supabase.from('users').select('*').in('id', sIds);
                         setEnrolledStudents(studentsData || []);
                       }
-                    } catch (err) {
-                      console.error(err);
-                      setImportStatus(`❌ Error: ${err instanceof Error ? err.message : 'Unknown error'}`);
+                    } catch (err: any) {
+                      console.error('CSV Import Error:', err);
+                      setImportStatus(`❌ Error: ${err?.message || (err instanceof Error ? err.message : 'Unknown error')}`);
                     }
                   }}
                   disabled={!csvFile}
