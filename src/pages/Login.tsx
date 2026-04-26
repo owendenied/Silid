@@ -1,12 +1,12 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Users, GraduationCap, BookOpen, Sparkles, Shield, Zap } from 'lucide-react';
+import { Users, GraduationCap, BookOpen, Sparkles, Shield, Zap, Moon, Sun } from 'lucide-react';
 import { useAppStore } from '../store/useAppStore';
 import { supabase } from '../lib/supabase';
 import { useT } from '../lib/i18n';
 
 export const Login = () => {
-  const { user } = useAppStore();
+  const { user, theme, setTheme } = useAppStore();
   const t = useT();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -67,7 +67,18 @@ export const Login = () => {
   };
 
   return (
-    <div className="min-h-screen bg-filipino-warm flex">
+    <div className="min-h-screen bg-[var(--background)] flex relative transition-colors duration-300">
+      {/* Theme Toggle */}
+      <div className="absolute top-4 right-4 z-50 lg:right-8 lg:top-8">
+        <button
+          onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+          className="p-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-500 dark:text-gray-400 hover:text-[var(--color-silid-coral)] transition-smooth shadow-sm btn-press"
+          aria-label="Toggle theme"
+        >
+          {theme === 'dark' ? <Sun size={20} /> : <Moon size={20} />}
+        </button>
+      </div>
+
       {/* Left side — Branding */}
       <div className="hidden lg:flex lg:w-1/2 bg-gradient-coral relative overflow-hidden flex-col justify-center items-center p-12 text-white">
         <div className="absolute inset-0 opacity-10">
@@ -83,25 +94,25 @@ export const Login = () => {
           <p className="text-xl text-white/80 font-medium mb-12">Your premium Filipino Learning Management System</p>
           
           <div className="space-y-6 text-left">
-            <div className="flex items-center gap-4 bg-white/10 backdrop-blur-sm p-4 rounded-xl">
+            <div className="flex items-center gap-4 bg-white/10 backdrop-blur-sm p-4 rounded-xl border border-white/10">
               <Sparkles size={24} className="text-yellow-300 flex-shrink-0" />
               <div>
                 <p className="font-bold text-sm">AI-Powered Learning</p>
-                <p className="text-xs text-white/70">Instant grading & lesson planning with Guro Bot</p>
+                <p className="text-xs text-white/70">Instant AI lesson planning & 24/7 Guro Bot tutoring</p>
               </div>
             </div>
-            <div className="flex items-center gap-4 bg-white/10 backdrop-blur-sm p-4 rounded-xl">
+            <div className="flex items-center gap-4 bg-white/10 backdrop-blur-sm p-4 rounded-xl border border-white/10">
               <Shield size={24} className="text-green-300 flex-shrink-0" />
               <div>
-                <p className="font-bold text-sm">Offline-First</p>
-                <p className="text-xs text-white/70">Works without internet, syncs when back online</p>
+                <p className="font-bold text-sm">Smart Class Management</p>
+                <p className="text-xs text-white/70">Seamless multi-section logic and automated grading</p>
               </div>
             </div>
-            <div className="flex items-center gap-4 bg-white/10 backdrop-blur-sm p-4 rounded-xl">
-              <Zap size={24} className="text-yellow-300 flex-shrink-0" />
+            <div className="flex items-center gap-4 bg-white/10 backdrop-blur-sm p-4 rounded-xl border border-white/10">
+              <Zap size={24} className="text-blue-300 flex-shrink-0" />
               <div>
-                <p className="font-bold text-sm">Gamified Experience</p>
-                <p className="text-xs text-white/70">XP, badges, and levels to motivate students</p>
+                <p className="font-bold text-sm">Modern & Engaging Design</p>
+                <p className="text-xs text-white/70">Beautiful Filipino-inspired UI with Dark/Light mode</p>
               </div>
             </div>
           </div>

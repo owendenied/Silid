@@ -18,11 +18,13 @@ interface AppState {
 
   isOffline: boolean;
   isInitializing: boolean;
+  theme: 'light' | 'dark';
   setUser: (user: AppState['user']) => void;
   setClasses: (classes: any[]) => void;
   setStats: (stats: AppState['stats']) => void;
   setOfflineStatus: (status: boolean) => void;
   setInitializing: (status: boolean) => void;
+  setTheme: (theme: 'light' | 'dark') => void;
   logout: () => Promise<void>;
 }
 
@@ -34,11 +36,13 @@ export const useAppStore = create<AppState>()(
       stats: { totalStudents: 0, pendingGradings: 0, pendingAssignments: 0 },
       isOffline: !navigator.onLine,
       isInitializing: true,
+      theme: 'light',
       setUser: (user) => set({ user }),
       setClasses: (classes) => set({ classes }),
       setStats: (stats) => set({ stats }),
       setOfflineStatus: (isOffline) => set({ isOffline }),
       setInitializing: (isInitializing) => set({ isInitializing }),
+      setTheme: (theme) => set({ theme }),
       logout: async () => {
         set({ user: null, classes: [], stats: { totalStudents: 0, pendingGradings: 0, pendingAssignments: 0 } });
         localStorage.clear();
@@ -52,7 +56,8 @@ export const useAppStore = create<AppState>()(
         user: state.user,
         classes: state.classes,
         stats: state.stats,
-        isOffline: state.isOffline 
+        isOffline: state.isOffline,
+        theme: state.theme
       }),
     }
   )
