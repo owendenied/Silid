@@ -49,6 +49,11 @@ export const Dashboard = () => {
   const [generatedPlan, setGeneratedPlan] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
 
+  // Bulk Import state
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+  const [csvFile, setCsvFile] = useState<File | null>(null);
+  const [importStatus, setImportStatus] = useState('');
+
   const ensureDbId = async (): Promise<number> => {
     if (!user) throw new Error('Not logged in');
     const currentDbId = user.dbId;
@@ -220,10 +225,81 @@ export const Dashboard = () => {
       const classSections = classroom.section ? classroom.section.split(',').filter((s: string) => s.trim()) : [];
       if (classSections.length === 1) setJoinSection(classSections[0]);
     } catch (error: any) {
-      console.error('❌ Lookup Error:', error);
-      setErrorMsg(error.message || 'Error looking up class.');
+      console.error('❌ Join Error:', error);
+      setErrorMsg(error.message || 'Error joining class.');
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const handleDashboardCSVImport = async () => {
+    if (!csvFile || !user) return;
+    setImportStatus('⏳ Processing Bulk CSV...');
+    try {
+      const text = await csvFile.text();
+      const lines = text.trim().split('\n').filter(l => l.trim());
+      let imported = 0;
+      let errors = 0;
+
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+        if (i === 0 && line.toLowerCase().includes('name')) continue;
+
+        const parts = line.split(',').map(p => p.trim().replace(/"/g, ''));
+        if (parts.length < 3) continue; // Name, Email, Class
+        const [name, email, className, section] = parts;
+
+        // 1. Match Class
+        const targetClass = classes.find(c => c.name.toLowerCase() === className.toLowerCase());
+        if (!targetClass) {
+          console.warn(`Class not found: ${className}`);
+          errors++;
+          continue;
+        }
+
+        // 2. Ensure Student User
+        const { data: existingUser } = await supabase.from('users').select('id').eq('email', email).maybeSingle();
+        let studentId: number;
+        if (existingUser) {
+          studentId = existingUser.id;
+        } else {
+          const { data: newUser, error: insertErr } = await supabase.from('users').insert([{
+            openId: `csv-${Date.now()}-${Math.floor(Math.random() * 10000)}`,
+            name, email, "appRole": 'student'
+          }]).select('id').single();
+          if (insertErr || !newUser) {
+            errors++;
+            continue;
+          }
+          studentId = newUser.id;
+        }
+
+        // 3. Enroll
+        const { data: existingEnroll } = await supabase.from('enrollments')
+          .select('id')
+          .eq('classroomId', targetClass.id)
+          .eq('studentId', studentId)
+          .maybeSingle();
+
+        if (!existingEnroll) {
+          await supabase.from('enrollments').insert([{
+            classroomId: targetClass.id,
+            studentId,
+            section: section || null
+          }]);
+        }
+        imported++;
+      }
+
+      setImportStatus(`✅ Done! Imported ${imported} students. (${errors} skipped/errors)`);
+      setTimeout(() => {
+        setIsImportModalOpen(false);
+        setImportStatus('');
+        setCsvFile(null);
+      }, 3000);
+    } catch (err: any) {
+      console.error('Bulk Import Error:', err);
+      setImportStatus(`❌ Error: ${err?.message || 'Unknown error'}`);
     }
   };
 
@@ -289,18 +365,32 @@ export const Dashboard = () => {
             {user?.role === 'teacher' ? t('dash.subtitle_teacher') : t('dash.subtitle_student')}
           </p>
         </div>
-        <div className="flex gap-3">
+        <div className="flex flex-wrap gap-3">
           {user?.role === 'teacher' && (
-            <button
-              onClick={() => setIsAIModalOpen(true)}
-              className="flex items-center justify-center gap-2 px-6 py-3.5 rounded-2xl font-bold transition-smooth btn-press bg-gradient-gold text-white shadow-glow-gold hover:scale-105"
-            >
-              <Sparkles size={22} />
-              AI Lesson Plan
-            </button>
+            <>
+              <button 
+                onClick={() => setIsImportModalOpen(true)}
+                className="flex items-center gap-2 px-5 py-3.5 bg-white border border-gray-200 text-gray-700 rounded-2xl font-bold hover:bg-gray-50 transition-smooth shadow-sm btn-press"
+              >
+                <Download size={20} className="text-[var(--color-silid-coral)]" />
+                <span>Import Students</span>
+              </button>
+              <button
+                onClick={() => setIsAIModalOpen(true)}
+                className="flex items-center justify-center gap-2 px-6 py-3.5 rounded-2xl font-bold transition-smooth btn-press bg-gradient-gold text-white shadow-glow-gold hover:scale-105"
+              >
+                <Sparkles size={22} />
+                AI Lesson Plan
+              </button>
+            </>
           )}
           <button
-            onClick={() => setIsModalOpen(true)}
+            onClick={() => {
+              setIsModalOpen(true);
+              setErrorMsg('');
+              setFoundClass(null);
+              setJoinCode('');
+            }}
             className={`flex items-center justify-center gap-2 px-8 py-3.5 rounded-2xl font-bold transition-smooth btn-press ${
               user?.role === 'teacher'
                 ? 'bg-gradient-coral text-white shadow-glow-coral hover:scale-105'
@@ -683,6 +773,54 @@ export const Dashboard = () => {
           </Link>
         </div>
       </div>
+      {/* Bulk Import Modal */}
+      {isImportModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
+          <div className="bg-white rounded-3xl w-full max-w-md overflow-hidden shadow-2xl animate-scale-up">
+            <div className="p-6 border-b border-gray-100 flex justify-between items-center">
+              <h3 className="text-xl font-bold text-gray-900">Bulk Import Students</h3>
+              <button onClick={() => setIsImportModalOpen(false)} className="p-2 hover:bg-gray-100 rounded-full transition-smooth"><X size={20} /></button>
+            </div>
+            
+            <div className="p-8">
+              <div className="bg-blue-50 rounded-2xl p-4 mb-6">
+                <p className="text-sm font-bold text-blue-700 mb-1">CSV Format Required:</p>
+                <p className="text-xs text-blue-600 font-mono">name, email, class, section</p>
+                <p className="text-[10px] text-blue-500 mt-2 italic">Students will be auto-enrolled into matching classes.</p>
+              </div>
+
+              <div className="border-2 border-dashed border-gray-200 rounded-2xl p-10 flex flex-col items-center justify-center hover:border-[var(--color-silid-coral)] transition-smooth group relative">
+                <input type="file" className="absolute inset-0 opacity-0 cursor-pointer" accept=".csv" onChange={e => setCsvFile(e.target.files?.[0] || null)} />
+                <Download size={40} className="text-gray-300 group-hover:text-[var(--color-silid-coral)] mb-4 transition-smooth" />
+                <p className="text-gray-600 font-bold">{csvFile ? csvFile.name : 'Click to upload CSV'}</p>
+                <p className="text-xs text-gray-400 mt-1">or drag and drop here</p>
+              </div>
+
+              {importStatus && (
+                <div className={`mt-6 p-4 rounded-xl text-sm font-bold text-center ${importStatus.includes('❌') ? 'bg-red-50 text-red-600' : 'bg-green-50 text-green-600'}`}>
+                  {importStatus}
+                </div>
+              )}
+
+              <div className="mt-8 flex gap-3">
+                <button 
+                  onClick={handleDashboardCSVImport}
+                  disabled={!csvFile || importStatus.includes('⏳')}
+                  className="flex-1 bg-gradient-coral text-white py-3.5 rounded-xl font-bold hover:scale-[1.02] shadow-glow-coral transition-smooth btn-press disabled:opacity-50"
+                >
+                  Confirm Import
+                </button>
+                <button 
+                  onClick={() => setIsImportModalOpen(false)}
+                  className="px-6 py-3.5 border border-gray-200 rounded-xl font-bold hover:bg-gray-50 transition-smooth btn-press"
+                >
+                  {t('cancel')}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
