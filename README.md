@@ -1,16 +1,17 @@
 <div align="center">
   <img src="public/logo.png" alt="Silid Logo" width="120" height="120">
   
-  # Silid - Offline-First AI Learning Management System
+  # Silid - The Smart Learning Management System
   
-  > *A premium Filipino-inspired Learning Management System*  
-  > A comprehensive educational platform demonstrating the power of offline-first PWA and AI integration.
+  > *Empowering Teachers, Engaging Students.*  
+  > A digital space where education is an opportunity, built to address the infrastructure and teaching crisis.
 </div>
 
 [![React](https://img.shields.io/badge/React-19.0.0-blue.svg)](https://react.dev)
 [![Vite](https://img.shields.io/badge/Vite-8.0.0-purple.svg)](https://vitejs.dev/)
 [![Tailwind CSS](https://img.shields.io/badge/Tailwind-4.0.0-38B2AC.svg)](https://tailwindcss.com/)
 [![Supabase](https://img.shields.io/badge/Supabase-Backend-3ECF8E.svg)](https://supabase.com/)
+[![Gemini AI](https://img.shields.io/badge/Google_Gemini-AI-orange.svg)](https://ai.google.dev/)
 [![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 ## 🎥 Demo Video
@@ -19,92 +20,43 @@ Watch Silid in action: [**View Demo Video**](#) *(Coming Soon)*
 
 ---
 
-## About Silid
+## About Silid & The Infrastructure Crisis
 
-Silid is a comprehensive *offline-first Learning Management System* that combines AI-powered lesson planning, automated grading assistance, and an engaging gamified student experience. Built to address real-world connectivity challenges, Silid showcases a robust offline capability using Dexie.js alongside a powerful cloud backend via Supabase.
+The Philippines is currently facing a severe infrastructure crisis, missing over 165,000 classrooms. This shortage forces over 2,200 schools to run multiple shifts, meaning millions of students have very little time to actually study in a classroom. At our current budget, it will take 20 years to build enough rooms for everyone. Our students simply cannot wait two decades for a place to learn.
 
-### Why Silid?
+**The Teacher and Tech Gap**
+The problem isn't just the buildings; it is also the people and the tools. We are currently missing between 30,000 and 65,000 teachers nationwide. The teachers we do have are exhausted because they must manage overcrowded rooms while spending hours manually planning lessons and grading papers. 
 
-- *Real-World Application*: Designed with the Philippine educational context in mind, where internet connectivity can be intermittent.
-- *Advanced Features*: Google Gemini AI integration for instant lesson plans, Supabase for real-time syncing, and complete PWA support.
-- *True Offline-First*: Read modules, answer quizzes, and manage classes even without an internet connection. Data syncs automatically once online.
-- *Modern Architecture*: Built with React 19, Vite, Tailwind CSS 4, and the latest web standards.
+While we hope digital tools can help, current platforms are often too complex for busy teachers or too boring for students. Learning becomes a chore rather than an opportunity, and without the right support, a student's progress stops the moment they leave the school gates.
 
----
-
-## Platforms Supported
-
-### Web Browser (Primary Platform)
-- *Target*: Modern web browsers (Chrome, Edge, Firefox, Safari)
-- *Features*: Full feature set including AI tools, real-time chat, and class management.
-- *UI*: Clean, modern design with Filipino-inspired aesthetic and Dark/Light mode support.
-
-### Desktop & Mobile (PWA)
-- *Target*: Installable Progressive Web App
-- *Features*: Offline access to downloaded modules and assignments.
-- *Experience*: Native-app-like feel on both Android/iOS home screens and Desktop operating systems.
+**The Solution**
+We built **Silid** to be a smarter, more efficient digital classroom. It is designed to take the weight off teachers’ shoulders and put the joy back into learning for students.
 
 ---
 
 ## Core Features
 
-### Smart Class Management
-- *Multi-Section Support*: Easily manage large classes with multiple sections under a single subject.
-- *Automated Grading*: AI-assisted checking for short answer and essay questions.
-- *Class Archiving*: Keep your dashboard clean by archiving old classes without losing data.
-- *Stream & Announcements*: Real-time announcements with file attachments.
+### Easy Access via Teacher Codes
+Students join their specific classes instantly by entering a simple code from their teacher. No complicated registration—just immediate access to their lessons.
 
-### AI Integration (Gemini)
-- *Lesson Plan Generator*: Teachers can generate complete, exportable (PDF) lesson plans instantly by just providing a topic and grade level.
-- *Guro Bot*: An AI tutor available 24/7 to help students understand complex topics.
-- *Smart Quiz Creation*: Quickly generate interactive quizzes, true/false questions, and identification tests.
+### Guro Bot (AI for Teachers)
+To solve the teacher shortage and burnout, we created Guro Bot. It uses AI to auto-generate lesson plans and act as a smart assistant, giving teachers hours of their time back so they can focus on mentoring students.
 
-### Offline & Sync Capabilities
-- *Dexie.js Local Database*: All essential data is cached locally for immediate access.
-- *Background Sync*: Actions taken offline are queued and seamlessly synced to Supabase when connectivity returns.
-- *Offline Indicator*: Visual cues let users know when they are working offline or syncing.
+### Guro Bot (AI for Students)
+For students, Guro Bot is a 24/7 tutor. It answers questions about lessons instantly, ensuring that learning doesn't stop even when the teacher is busy with other students.
 
-### Student Experience
-- *Gamification*: Students earn XP for completing tasks, unlocking new titles and badges.
-- *Clear Dashboards*: Simple view of pending tasks, active classes, and recent grades.
-- *Real-Time Chat*: Direct messaging with teachers and classmates.
+### Gamified Experience
+We believe learning should feel like an achievement. Silid uses XP, badges, and progress bars to motivate students. By turning lessons into a rewarding journey, we keep students engaged and excited to finish their modules.
 
 ---
 
 ## Technical Architecture
 
-### Tech Stack Structure
-```text
-Silid/
-├── public/              # Static assets and PWA icons
-├── src/
-│   ├── assets/          # Global styles and images
-│   ├── components/      # Reusable UI components and layouts
-│   ├── hooks/           # Custom React hooks (e.g., useSync)
-│   ├── lib/             # Core services (Supabase, Dexie, Gemini, i18n)
-│   ├── pages/           # Application views (Dashboard, Classroom, etc.)
-│   └── store/           # Zustand state management
-└── database/            # Supabase SQL schema and RLS policies
-```
+Silid is built with high-performance tools to ensure it is reliable and easy to use.
 
-### Technology Stack
-
-#### Core Technologies
-- *React*: 19.2.5
-- *TypeScript*: Strict type checking
-- *Vite*: Extremely fast build tool and dev server
-- *Tailwind CSS*: 4.2.4 for utility-first styling
-
-#### State & Data
-- *Zustand*: Lightweight global state management
-- *Supabase Client*: Authentication and Postgres database interaction
-- *Dexie.js*: IndexedDB wrapper for offline storage
-- *React Router*: v7 for client-side routing
-
-#### Integrations
-- *Google Generative AI*: Gemini API for lesson plans and auto-checking
-- *jsPDF*: Client-side PDF generation for lesson plans
-- *Lucide React*: Beautiful, consistent iconography
+- **React**: We used React for the frontend to create a fast, responsive, and intuitive user interface that works smoothly on any device.
+- **Supabase**: Our backend is powered by Supabase, providing us with a robust real-time database and secure authentication to handle student data and class progress efficiently.
+- **Gemini AI**: Guro Bot is integrated with Google’s Gemini, allowing us to provide high-level intelligence for automated lesson planning and interactive student tutoring.
 
 ---
 
@@ -157,7 +109,7 @@ npm run dev
 ### Production Build
 
 ```bash
-# Build the application and generate PWA service workers
+# Build the application
 npm run build
 
 # Preview the production build locally
@@ -170,7 +122,7 @@ npm run preview
 
 *(Coming Soon)*
 
-| Landing Page | Dashboard | AI Lesson Plan |
+| Landing Page | Dashboard | Guro Bot (AI) |
 |-------------|--------------|-----------------|
 | Placeholder | Placeholder | Placeholder |
 
@@ -181,33 +133,21 @@ npm run preview
 | Feature | Teacher | Student |
 |---------|---------|---------|
 | Create Classes | Yes | No |
-| Join Classes | No | Yes |
+| Join via Code | No | Yes |
 | Create Assignments | Yes | No |
 | Submit Assignments | No | Yes |
-| Auto-Grade / Manual Grade| Yes | No |
-| AI Lesson Plans | Yes | No |
-| Gamification (XP) | No | Yes |
-| Offline Mode | Yes | Yes |
+| AI Lesson Planning | Yes | No |
+| 24/7 AI Tutor | No | Yes |
+| Gamification (XP & Badges)| No | Yes |
 | Real-Time Chat | Yes | Yes |
 
 ---
 
-## Why This Project Stands Out
+## The Real-World Impact
 
-### 1. *Production-Ready Quality*
-- Complete authentication flow with role-based access control.
-- Robust database schema with Row Level Security (RLS).
-- Comprehensive error handling and offline fallback mechanisms.
+> "We cannot wait 20 years for every school to have a new building. We need to support our teachers and engage our students now. By combining Google's Gemini AI with an engaging, gamified experience, Silid provides a digital space where education is an opportunity. Our mission is simple: to make sure that for every student, the 'cost of dreaming' is never too high."
 
-### 2. *True Offline-First Experience*
-- Not just caching static assets—users can interact with the app, complete assignments, and browse modules without an internet connection using IndexedDB and Service Workers.
-
-### 3. *Meaningful AI Integration*
-- Uses generative AI not as a gimmick, but to solve real teacher pain points: generating lesson plans instantly and providing auto-checking for qualitative answers.
-
-### 4. *Localized Context*
-- Designed specifically for environments where internet access is unstable, making e-learning accessible to more students.
-- Bilingual support (English & Tagalog) built-in.
+**Team Silid**
 
 ---
 
